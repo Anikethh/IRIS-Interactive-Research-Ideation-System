@@ -1,0 +1,1157 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>IRIS - Interactive Research Ideation System</title>
+    <!-- Import custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <!-- Import Bootstrap for basic component styling -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <!-- Import Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <!-- Import D3.js -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <!-- jQuery is used for simplicity -->
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- Review component styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/review-styles.css') }}">
+    <!-- Add this in the head section of your HTML -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <!-- Rest of your existing head content -->
+
+    <style>
+        [data-sender="assistant"] {
+            padding: 10px 15px;
+            margin: 5px 0;
+            border-radius: 8px;
+            background: #f8f9fa;
+        }
+
+        [data-sender="assistant"] h1,
+        [data-sender="assistant"] h2,
+        [data-sender="assistant"] h3 {
+            margin-top: 10px;
+            margin-bottom: 8px;
+            font-size: 1.1em;
+        }
+
+        [data-sender="assistant"] p {
+            margin: 8px 0;
+        }
+
+        [data-sender="assistant"] ul,
+        [data-sender="assistant"] ol {
+            margin: 8px 0;
+            padding-left: 20px;
+        }
+
+        [data-sender="assistant"] code {
+            background: #e9ecef;
+            padding: 2px 4px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+
+        [data-sender="assistant"] pre {
+            background: #e9ecef;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+
+        /* Add styling for main idea panel */
+        #main-idea {
+            padding: 15px;
+            mask-image: linear-gradient(to bottom, black 0, black 90%, transparent 100%);
+            -webkit-mask-image: linear-gradient(to bottom, black 0, black 90%, transparent 100%);
+        }
+
+        #main-idea h1,
+        #main-idea h2,
+        #main-idea h3 {
+            margin-top: 10px;
+            margin-bottom: 8px;
+            font-size: 1.1em;
+        }
+
+        #main-idea p {
+            margin: 8px 0;
+        }
+
+        #main-idea ul,
+        #main-idea ol {
+            margin: 8px 0;
+            padding-left: 20px;
+        }
+
+        #main-idea code {
+            background: #e9ecef;
+            padding: 2px 4px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+
+        #main-idea pre {
+            background: #e9ecef;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+
+        .idea {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        #main-idea {
+            flex: 1 1 auto;
+            max-height: calc(100vh - 120px);
+            overflow-y: auto;
+            border-bottom: 1px solid #e5e7eb;
+            padding: 15px;
+            mask-image: linear-gradient(to bottom, black 0, black 90%, transparent 100%);
+            -webkit-mask-image: linear-gradient(to bottom, black 0, black 90%, transparent 100%);
+        }
+
+        .review-feedback {
+            height: 80px;
+            padding: 15px 20px;
+            background: #fff;
+            border-top: 1px solid #e5e7eb;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            mask-image: linear-gradient(to bottom, black 0, black 90%, transparent 100%);
+            -webkit-mask-image: linear-gradient(to bottom, black 0, black 90%, transparent 100%);
+        }
+
+        .review-info {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .review-category {
+            color: #6b7280;
+            font-size: 0.9em;
+        }
+
+        .review-navigation {
+            display: flex;
+            gap: 5px;
+        }
+
+        .review-navigation button {
+            padding: 4px 8px;
+            border: none;
+            background: none;
+            color: #6b7280;
+            cursor: pointer;
+            font-size: 0.8em;
+        }
+
+        .review-actions {
+            display: flex;
+            gap: 10px;
+            margin-left: 20px;
+        }
+
+        .review-actions button {
+            padding: 8px;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .fix-button {
+            background-color: #3b82f6;
+            color: white;
+        }
+
+        .ignore-button {
+            background-color: #e5e7eb;
+            color: #374151;
+        }
+
+        .qa-container {
+            mask-image: linear-gradient(to bottom, black 0, black 90%, transparent 100%);
+            -webkit-mask-image: linear-gradient(to bottom, black 0, black 90%, transparent 100%);
+        }
+
+        .chat-box {
+            mask-image: linear-gradient(to bottom, black 0, black 90%, transparent 100%);
+            -webkit-mask-image: linear-gradient(to bottom, black 0, black 90%, transparent 100%);
+        }
+
+        .loading-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: #3b82f6;
+            animation: spin 1s linear infinite;
+            margin-bottom: 15px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .loading-text {
+            color: #4b5563;
+            font-size: 0.9em;
+        }
+
+        .error-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .error-icon {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+
+        .error-text {
+            color: #dc2626;
+            margin-bottom: 15px;
+        }
+
+        .retry-button {
+            background-color: #3b82f6;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+
+        .query-header {
+            padding: 10px 15px;
+            background-color: #f3f4f6;
+            border-radius: 6px;
+            margin-bottom: 15px;
+        }
+
+        .query-title {
+            font-weight: 600;
+            font-size: 0.8em;
+            color: #4b5563;
+            margin-bottom: 3px;
+        }
+
+        .query-text {
+            font-weight: 500;
+            color: #111827;
+        }
+
+        .section-summary {
+            font-style: italic;
+            color: #4b5563;
+            margin-bottom: 10px;
+            padding: 5px 10px;
+            background-color: #f9fafb;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+
+        .section-content {
+            margin-bottom: 15px;
+        }
+
+        .citations-list {
+            margin-top: 10px;
+            border-top: 1px solid #e5e7eb;
+            padding-top: 10px;
+        }
+
+        .citation-item {
+            display: flex;
+            margin-bottom: 10px;
+            padding-left: 5px;
+        }
+
+        .citation-link {
+            min-width: 60px;
+            font-weight: 500;
+            color: #2563eb;
+        }
+
+        .citation-details {
+            flex: 1;
+        }
+
+        .citation-title {
+            font-size: 0.9em;
+            font-weight: 500;
+        }
+
+        .citation-meta {
+            font-size: 0.8em;
+            color: #6b7280;
+        }
+
+        /* API Key icon styles */
+        .api-key-icon {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            width: 36px;
+            height: 36px;
+            background: #f8fafc;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            z-index: 1000;
+        }
+
+        .api-key-icon:hover {
+            background: #f1f5f9;
+            transform: translateY(-2px);
+        }
+
+        .api-key-icon img {
+            width: 20px;
+            height: 20px;
+            opacity: 0.7;
+        }
+
+        /* API Key Modal styles */
+        .api-key-modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+            z-index: 1001;
+            width: 90%;
+            max-width: 500px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .api-key-modal h3 {
+            margin-bottom: 1.5rem;
+            font-weight: 600;
+            color: #1e293b;
+        }
+
+        .provider-select {
+            margin-bottom: 1rem;
+        }
+
+        .provider-select label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: #334155;
+        }
+
+        .provider-select select {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            background-color: #f8fafc;
+        }
+
+        .model-select {
+            margin-bottom: 1rem;
+        }
+
+        .model-select label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: #334155;
+        }
+
+        .model-select select {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            background-color: #f8fafc;
+        }
+
+        .api-key-input {
+            margin-bottom: 1.5rem;
+        }
+
+        .api-key-input label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: #334155;
+        }
+
+        .api-key-input input {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            background-color: #f8fafc;
+        }
+
+        .api-key-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .api-key-actions button {
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .save-key-btn {
+            background: #3b82f6;
+            color: white;
+            border: none;
+        }
+
+        .save-key-btn:hover {
+            background: #2563eb;
+        }
+
+        .cancel-key-btn {
+            background: #f1f5f9;
+            color: #64748b;
+            border: 1px solid #e2e8f0;
+        }
+
+        .cancel-key-btn:hover {
+            background: #e2e8f0;
+        }
+
+        .provider-info {
+            font-size: 0.85rem;
+            color: #64748b;
+            margin-top: 0.25rem;
+            font-style: italic;
+        }
+
+        .saved-keys {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .saved-key-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .saved-key-provider {
+            font-weight: 500;
+            color: #334155;
+        }
+
+        .saved-key-actions button {
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            border: none;
+            background-color: #fee2e2;
+            color: #dc2626;
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
+
+        .saved-key-actions button:hover {
+            background-color: #fecaca;
+        }
+
+        /* Updated search bar styling to match app design */
+        .sidebar-search {
+            display: flex;
+            border-radius: 20px;
+            overflow: hidden;
+            border: 1px solid #e0e3e8;
+            margin: 0;
+            flex: 1;
+            background: #fff;
+            max-width: 100%;
+        }
+
+        .sidebar-search input {
+            flex-grow: 1;
+            padding: 8px 16px;
+            border: none;
+            outline: none;
+            font-size: 14px;
+            color: #374151;
+            background-color: #f8fafc;
+            min-width: 0; /* Allows input to shrink if needed */
+        }
+
+        .sidebar-search button {
+            background: #f0f2f5;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 0;
+            /* padding: 0 10px; */
+            min-width: 36px;
+            /* height: 100%; */
+        }
+
+        .sidebar-search button:hover {
+            background: #e4e6eb;
+        }
+
+        .sidebar-buttons {
+            margin-top: auto;
+            padding: 10px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .pdf-button {
+            background: #f0f2f5;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 8px;
+            cursor: pointer;
+            min-width: 40px;
+            flex-shrink: 0;
+        }
+
+        .pdf-button:hover {
+            background: #e4e6eb;
+        }
+    </style>
+    <script src="{{ url_for('static', filename='js/secure-keys.js') }}"></script>
+</head>
+
+<body>
+    <div class="container-fluid">
+        <!-- Left sidebar: Retrieved Knowledge -->
+        <div class="sidebar">
+            <div class="heading">IRIS</div>
+            <!-- Add this section right after the heading -->
+            <div class="uploaded-files">
+                <div class="file-icon-container">
+                    <!-- File icons will be added here dynamically -->
+                </div>
+            </div>
+            <div class="qa-container">
+                <div class="initial-message" id="qa-placeholder">
+                    No research queries yet! Your interaction history with the research literature will appear here.
+                </div>
+                <div class="qa-content" id="qa-content" style="display: none;">
+                </div>
+            </div>
+            <div class="sidebar-buttons">
+                <div class="sidebar-search">
+                    <input type="text" placeholder="Search literature...">
+                    <button>
+                        <img src="{{ url_for('static', filename='icons/search.svg') }}" alt="Search" width="16" height="16">
+                    </button>
+                </div>
+                <label for="file-upload" class="sidebar-button pdf-button">
+                    <img src="{{ url_for('static', filename='icons/attach.svg') }}" alt="Add">
+                    <input type="file" id="file-upload" style="display: none" accept=".txt,.pdf,.doc,.docx">
+                </label>
+            </div>
+        </div>
+
+        <!-- Center: Chat area -->
+        <div class="chat">
+            <div class="top-bar">
+                <div class="top-bar-buttons">
+                    <button class="auto-generate" onclick="event.preventDefault(); toggleAutoGenerate(); stepAction('generate'); return false;">
+                        <img src="{{ url_for('static', filename='icons/auto.svg') }}" alt="Auto">
+                        <span>Automate Generation</span>
+                    </button>
+                    <button onclick="stepAction('prev')">
+                        <img src="{{ url_for('static', filename='icons/prev.svg') }}" alt="Previous">
+                    </button>
+                    <button onclick="stepAction('next')">
+                        <img src="{{ url_for('static', filename='icons/next.svg') }}" alt="Next">
+                    </button>
+                    <button onclick="stepAction('judge')">
+                        <img src="{{ url_for('static', filename='icons/judge.svg') }}" alt="Judge">
+                    </button>
+                    <button onclick="toggleTree()">
+                        <img src="{{ url_for('static', filename='icons/tree.svg') }}" alt="Tree">
+                    </button>
+                    <button onclick="showApiKeyModal()">
+                        <img src="{{ url_for('static', filename='icons/Key.svg') }}" alt="API Keys">
+                    </button>
+                </div>
+            </div>
+            <div id="main-content">
+                <div class="proposal-box" id="proposal-box" style="position: sticky; top: 0; z-index: 10; background: #f8fafc;">
+                    <div class="welcome-message" id="welcome-message">
+                        Welcome to IRIS.
+                    </div>
+                    <div class="proposal-content" id="proposal-content" style="display: none;">
+                        <!-- Proposal text will go here -->
+                    </div>
+                    <button class="edit-button" id="edit-button" style="display: none;">
+                        <img src="{{ url_for('static', filename='icons/edit.svg') }}" alt="Edit">
+                    </button>
+                </div>
+                
+                <!-- Chat box now comes after proposal box -->
+                <div class="chat-box" id="chat-box">
+                    <!-- Chat messages will appear here -->
+                </div>
+                <div class="tree-area" id="tree-area" style="display: none;">
+                    <!-- Tree visualization will be rendered here -->
+                </div>
+            </div>
+            <div class="chat-input">
+                <input type="text" id="chat-input" placeholder="Enter your research goal to begin...">
+                <button onclick="sendMessage()">
+                    <img src="{{ url_for('static', filename='icons/Send.svg') }}" alt="Send" width="16" height="16">
+                </button>
+            </div>
+        </div>
+
+        <!-- Right sidebar: Research Brief -->
+        <div class="idea">
+            <div class="heading">Research Brief</div>
+            <div id="score-display" class="score-display">
+                Score: <span id="current-score">-/10</span>
+            </div>
+            <div id="brief-placeholder" class="initial-message">
+                Your evolving research brief will appear here. Start by entering your initial research idea in the chat.
+            </div>
+            <div id="main-idea" style="display: none;">
+                <!-- Research Brief content -->
+            </div>
+            <div class="review-feedback" id="review-feedback" style="display: none;">
+                <div class="review-info">
+                    <div class="review-category" id="review-category">
+                        Methodological Limitation
+                    </div>
+                    <div class="review-navigation">
+                        <button onclick="navigateReview('prev')">Previous</button>
+                        <button onclick="navigateReview('next')">Next</button>
+                    </div>
+                </div>
+                <div class="review-actions">
+                    <button class="fix-button" onclick="handleReviewAction('fix')">
+                        <img src="{{ url_for('static', filename='icons/tick.svg') }}" alt="Fix" width="16" height="16">
+                    </button>
+                    <button class="ignore-button" onclick="handleReviewAction('ignore')">
+                        <img src="{{ url_for('static', filename='icons/cross.svg') }}" alt="Ignore" width="16" height="16">
+                    </button>
+                </div>
+            </div>
+            <div class="research-brief-buttons" style="display: none;">
+                <button class="generate-review">
+                    <img src="{{ url_for('static', filename='icons/judge.svg') }}" alt="Judge">
+                    Generate Review
+                </button>
+                <button class="retrieve-knowledge">
+                    <img src="{{ url_for('static', filename='icons/search.svg') }}" alt="Search">
+                    Retrieve Knowledge
+                </button>
+                <button class="refresh-button">
+                    <img src="{{ url_for('static', filename='icons/refresh.svg') }}" alt="Refresh">
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/review-helpers.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/review-ui.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/review-integration.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/debug-tools.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/retrieval.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/mcts_auto.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // Handle file upload and popup
+            document.getElementById('file-upload').addEventListener('change', async (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const formData = new FormData();
+                formData.append('file', file);
+
+                try {
+                    const response = await fetch('/api/upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        // Show uploaded files section
+                        const uploadedFiles = document.querySelector('.uploaded-files');
+                        uploadedFiles.style.display = 'block';
+
+                        // Add file icon
+                        const fileContainer = document.querySelector('.file-icon-container');
+                        const fileIcon = document.createElement('div');
+                        fileIcon.className = 'file-icon';
+                        fileIcon.innerHTML = `<img src="{{ url_for('static', filename='icons/file.svg') }}" alt="File">`;
+
+                        // Add click handler for file preview
+                        fileIcon.addEventListener('click', () => {
+                            showFilePopup(data.filename);
+                        });
+
+                        fileContainer.appendChild(fileIcon);
+                    } else {
+                        alert(data.error || 'Error uploading file');
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert('Error uploading file');
+                }
+            });
+
+            // Popup handling functions
+            function showFilePopup(filename) {
+                const popup = document.querySelector('.file-popup');
+                const overlay = document.querySelector('.popup-overlay');
+                const content = popup.querySelector('.file-content');
+
+                content.innerHTML = `<p>Preview of ${filename}</p>
+                                   <p>This is a dummy preview. Real content will be implemented later.</p>`;
+
+                popup.style.display = 'block';
+                overlay.style.display = 'block';
+            }
+
+            // Close popup when clicking overlay
+            document.querySelector('.popup-overlay').addEventListener('click', closePopup);
+
+            // Close popup when pressing Escape key
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') closePopup();
+            });
+
+            function closePopup() {
+                document.querySelector('.file-popup').style.display = 'none';
+                document.querySelector('.popup-overlay').style.display = 'none';
+            }
+        });
+
+        // Add this to your existing script
+        function stepAction(action) {
+            if (action === 'judge') {
+                showJudgePopup();
+            }
+            // ... existing stepAction code ...
+        }
+
+        function showJudgePopup() {
+            document.querySelector('.judge-popup').style.display = 'block';
+            document.querySelector('.popup-overlay').style.display = 'block';
+        }
+
+        function closeJudgePopup() {
+            document.querySelector('.judge-popup').style.display = 'none';
+            document.querySelector('.popup-overlay').style.display = 'none';
+        }
+
+        // Update slider values in real-time
+        document.querySelectorAll('.slider').forEach(slider => {
+            slider.addEventListener('input', function () {
+                this.nextElementSibling.textContent = this.value;
+            });
+        });
+
+        function submitJudgement() {
+            // Get values from sliders
+            const scores = {
+                novelty: parseInt(document.getElementById('novelty').value),
+                clarity: parseInt(document.getElementById('clarity').value),
+                feasibility: parseInt(document.getElementById('feasibility').value),
+                effectiveness: parseInt(document.getElementById('effectiveness').value),
+                impact: parseInt(document.getElementById('impact').value)
+            };
+
+            // Calculate total score to normalize weights
+            const total = Object.values(scores).reduce((sum, val) => sum + val, 0);
+            
+            // Convert scores to normalized weights
+            const weights = Object.entries(scores).reduce((obj, [key, value]) => {
+                obj[key] = value / total;
+                return obj;
+            }, {});
+
+            // Make API call to update weights
+            fetch('/api/set_aspect_weights', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ weights })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    console.log('Weights updated successfully');
+                } else {
+                    console.error('Failed to update weights:', data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error updating weights:', error);
+            });
+
+            closeJudgePopup();
+        }
+
+        // Close judge popup when clicking overlay
+        document.querySelector('.popup-overlay').addEventListener('click', () => {
+            closeJudgePopup();
+        });
+
+        // Close judge popup with Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeJudgePopup();
+            }
+        });
+
+        // Add this function to handle slider value updates
+        function updateSliderValue(slider) {
+            const valueSpan = document.getElementById(`${slider.id}-value`);
+            valueSpan.textContent = slider.value;
+        }
+
+        // API Key Modal functionality with improved security
+        async function showApiKeyModal() {
+            document.querySelector('.api-key-modal').style.display = 'block';
+            document.querySelector('.popup-overlay').style.display = 'block';
+            // Load saved keys securely
+            loadSavedApiKeysSecurely();
+        }
+
+        function closeApiKeyModal() {
+            document.querySelector('.api-key-modal').style.display = 'none';
+            document.querySelector('.popup-overlay').style.display = 'none';
+        }
+
+        async function saveApiKey() {
+            const provider = document.getElementById('api-provider').value;
+            const apiKey = document.getElementById('api-key').value.trim();
+
+            if (!apiKey) {
+                alert('Please enter an API key');
+                return;
+            }
+
+            // Save key securely using our new manager
+            const success = await window.secureKeyManager.securelyStoreApiKey(provider, apiKey);
+            
+            if (success) {
+                // Update the saved keys list
+                loadSavedApiKeysSecurely();
+
+                // Clear input
+                document.getElementById('api-key').value = '';
+
+                // Show success message
+                alert(`API key for ${provider} saved successfully`);
+            } else {
+                alert('Error saving API key. Please try again.');
+            }
+        }
+
+        async function loadSavedApiKeysSecurely() {
+            const savedKeysContainer = document.getElementById('saved-keys');
+            savedKeysContainer.innerHTML = '';
+
+            // Get saved providers from secure manager
+            const savedProviders = window.secureKeyManager.listSavedKeyProviders();
+            
+            if (savedProviders.length === 0) {
+                savedKeysContainer.innerHTML = '<p>No API keys saved yet.</p>';
+                return;
+            }
+
+            for (const providerInfo of savedProviders) {
+                const keyItem = document.createElement('div');
+                keyItem.className = 'saved-key-item';
+                
+                const date = new Date(providerInfo.timestamp);
+                const dateStr = date.toLocaleDateString();
+                
+                keyItem.innerHTML = `
+                    <div class="saved-key-provider">
+                        ${providerInfo.provider} 
+                        <span class="saved-key-date">(saved on ${dateStr})</span>
+                    </div>
+                    <div class="saved-key-actions">
+                        <button onclick="deleteApiKeySecurely('${providerInfo.provider}')">Delete</button>
+                    </div>
+                `;
+                savedKeysContainer.appendChild(keyItem);
+            }
+        }
+
+        async function deleteApiKeySecurely(provider) {
+            if (confirm(`Are you sure you want to delete the API key for ${provider}?`)) {
+                const success = await window.secureKeyManager.deleteApiKey(provider);
+                
+                if (success) {
+                    loadSavedApiKeysSecurely();
+                    alert(`API key for ${provider} deleted successfully.`);
+                } else {
+                    alert('Error deleting API key. Please try again.');
+                }
+            }
+        }
+
+        // Initialize secure key system when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            // Add listener for secure context warning
+            const isSecure = window.secureKeyManager.isSecureContext();
+            if (!isSecure) {
+                console.warn('Warning: Running in an insecure context. API key encryption may be limited.');
+            }
+        });
+
+        // Close API Key modal with escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && document.querySelector('.api-key-modal').style.display === 'block') {
+                closeApiKeyModal();
+            }
+        });
+
+        // Close API key modal when clicking overlay
+        document.querySelector('.popup-overlay').addEventListener('click', function() {
+            if (document.querySelector('.api-key-modal').style.display === 'block') {
+                closeApiKeyModal();
+            }
+        });
+
+        // Initialize model options when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            updateModelOptions();
+        });
+    </script>
+
+    <div class="popup-overlay"></div>
+
+    <!-- API Key Modal -->
+    <div class="api-key-modal">
+        <h3>Manage API Keys</h3>
+        <div class="provider-select">
+            <label for="api-provider">Select Provider:</label>
+            <select id="api-provider">
+                <option value="openai">OpenAI</option>
+                <option value="claude">Anthropic Claude</option>
+                <option value="deepseek">DeepSeek</option>
+                <option value="gemini">Google Gemini</option>
+            </select>
+        </div>
+        <div class="api-key-input">
+            <label for="api-key">API Key:</label>
+            <input type="password" id="api-key" placeholder="Enter your API key">
+            <div id="provider-info" class="provider-info"></div>
+        </div>
+        <div class="api-key-actions">
+            <button class="cancel-key-btn" onclick="closeApiKeyModal()">Cancel</button>
+            <button class="save-key-btn" onclick="saveApiKey()">Save Key</button>
+        </div>
+        <div class="saved-keys" id="saved-keys">
+            <!-- Saved API keys will be displayed here -->
+        </div>
+    </div>
+
+    <div class="file-popup">
+        <h3>File Preview</h3>
+        <div class="file-content">
+            <!-- File content will be added here -->
+        </div>
+    </div>
+
+    <div class="judge-popup">
+        <h3>Judge Research Idea</h3>
+        <div class="metric-slider">
+            <label>Novelty</label>
+            <div class="slider-container">
+                <input type="range" min="1" max="5" value="3" class="slider" id="novelty"
+                    oninput="updateSliderValue(this)">
+                <span class="slider-value" id="novelty-value">3</span>
+            </div>
+        </div>
+        <div class="metric-slider">
+            <label>Clarity</label>
+            <div class="slider-container">
+                <input type="range" min="1" max="5" value="3" class="slider" id="clarity"
+                    oninput="updateSliderValue(this)">
+                <span class="slider-value" id="clarity-value">3</span>
+            </div>
+        </div>
+        <div class="metric-slider">
+            <label>Feasibility</label>
+            <div class="slider-container">
+                <input type="range" min="1" max="5" value="3" class="slider" id="feasibility"
+                    oninput="updateSliderValue(this)">
+                <span class="slider-value" id="feasibility-value">3</span>
+            </div>
+        </div>
+        <div class="metric-slider">
+            <label>Effectiveness</label>
+            <div class="slider-container">
+                <input type="range" min="1" max="5" value="3" class="slider" id="effectiveness"
+                    oninput="updateSliderValue(this)">
+                <span class="slider-value" id="effectiveness-value">3</span>
+            </div>
+        </div>
+        <div class="metric-slider">
+            <label>Impact</label>
+            <div class="slider-container">
+                <input type="range" min="1" max="5" value="3" class="slider" id="impact"
+                    oninput="updateSliderValue(this)">
+                <span class="slider-value" id="impact-value">3</span>
+            </div>
+        </div>
+        <div class="judge-actions">
+            <button class="judge-cancel" onclick="closeJudgePopup()">Cancel</button>
+            <button class="judge-submit" onclick="submitJudgement()">Submit</button>
+        </div>
+    </div>
+    
+    <!-- Add custom edit modal -->
+    <div class="edit-modal">
+        <div class="edit-modal-content">
+            <h3 class="edit-modal-title">Edit Text</h3>
+            <textarea id="edit-text-area" class="edit-text-area"></textarea>
+            <div class="edit-modal-actions">
+                <button class="cancel-edit-btn" onclick="closeEditModal()">Cancel</button>
+                <button class="save-edit-btn" onclick="saveEditChanges()">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="edit-text-modal">
+        <div class="edit-text-content">
+            <h3 id="edit-text-title">Edit Text</h3>
+            <textarea id="edit-text-textarea"></textarea>
+            <div class="edit-text-actions">
+                <button class="cancel-edit-btn" onclick="closeEditTextModal()">Cancel</button>
+                <button class="save-edit-btn" onclick="saveEditedText()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add custom edit popups -->
+    <div class="edit-popup" id="edit-proposal-popup">
+        <div class="edit-popup-content">
+            <h3>Edit Research Idea</h3>
+            <textarea id="proposal-edit-textarea" rows="10"></textarea>
+            <div class="edit-popup-actions">
+                <button class="cancel-edit-btn" onclick="closeEditProposalPopup()">Cancel</button>
+                <button class="save-edit-btn" onclick="saveProposalEdit()">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="edit-popup" id="edit-query-popup">
+        <div class="edit-popup-content">
+            <h3>Edit Search Query</h3>
+            <textarea id="query-edit-textarea" rows="6"></textarea>
+            <div class="edit-popup-actions">
+                <button class="cancel-edit-btn" onclick="closeEditQueryPopup()">Cancel</button>
+                <button class="save-edit-btn" onclick="saveQueryEdit()">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal dialog for editing proposal -->
+    <div class="custom-modal" id="edit-proposal-modal">
+        <div class="modal-content">
+            <h3>Edit Research Proposal</h3>
+            <textarea id="edit-proposal-textarea" rows="10"></textarea>
+            <div class="modal-actions">
+                <button class="cancel-modal-btn" onclick="closeProposalModal()">Cancel</button>
+                <button class="save-modal-btn" onclick="saveProposalEdit()">Save Changes</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal dialog for editing query -->
+    <div class="custom-modal" id="edit-query-modal">
+        <div class="modal-content">
+            <h3>Edit Search Query</h3>
+            <textarea id="edit-query-textarea" rows="6"></textarea>
+            <div class="modal-actions">
+                <button class="cancel-modal-btn" onclick="closeQueryModal()">Cancel</button>
+                <button class="save-modal-btn" onclick="saveQueryEdit()">Save Changes</button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="modal-overlay" id="modal-overlay"></div>
+
+    <!-- New Text Editor Modal -->
+    <div class="text-editor-modal">
+        <div class="editor-header">
+            <h3 id="editor-title">Edit Text</h3>
+            <button class="close-editor-btn" onclick="closeTextEditor()">&times;</button>
+        </div>
+        <div class="editor-body">
+            <textarea id="text-editor-content" rows="10"></textarea>
+        </div>
+        <div class="editor-footer">
+            <button class="cancel-editor-btn" onclick="closeTextEditor()">Cancel</button>
+            <button class="save-editor-btn" onclick="saveTextEditorContent()">Save Changes</button>
+        </div>
+    </div>
+</body>
+
+</html>

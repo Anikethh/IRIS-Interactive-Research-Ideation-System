@@ -1,0 +1,5 @@
+transformers==4.44.1
+sentencepiece
+hf-transfer==0.1.6
+huggingface_hub==0.23.4
+sentence-transformers==3.0.1

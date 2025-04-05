@@ -1,0 +1,70 @@
+# General configuration
+experiment:
+  seed: 42
+  n_rollouts: 4
+  max_depth: 3
+  save_intermediate: true
+  results_dir: "results/"
+  log_dir: "logs/"
+  prompts_path: "config/prompts.yaml"
+  save_frequency: 1
+
+# Flask application configuration
+app:
+  host: "0.0.0.0"
+  port: 5000
+  debug: false
+
+# Logging configuration
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "logs/app.log"
+
+# MCTS configuration
+mcts:
+  exploration_constant: 1.414
+  max_iterations: 100
+  max_depth: 10
+
+# LLM agent configuration
+llm_agent:
+  temperature: 0.7
+  max_tokens: 4096
+  retry_attempts: 3
+  retry_delay: 2
+
+# Model selection (override with environment variables)
+default_models:
+  llm: "gemini/gemini-2.0-flash-lite"
+  reranker: "cross-encoder/ms-marco-MiniLM-L-6-v2"
+
+# Retrieval agent configuration
+retrieval_agent:
+  max_papers: 10
+  chunk_size: 512
+  rerank_top_k: 5
+  summary_max_length: 200
+
+# Security configuration
+security:
+  # NEVER store API keys here - use environment variables instead
+  # See .env.example for required keys and formats
+  api_key_storage: "secure_keys"  # Directory for encrypted API keys in production
+  min_key_length: 32
+  encryption_iterations: 480000
+  secure_headers:
+    - "X-Frame-Options: DENY"
+    - "X-Content-Type-Options: nosniff"
+    - "Referrer-Policy: strict-origin-when-cross-origin"
+    - "Content-Security-Policy: default-src 'self'"
+
+# Storage configuration
+storage:
+  upload_folder: "uploads"
+  allowed_extensions:
+    - txt
+    - pdf
+    - doc
+    - docx
+  max_file_size: 16777216  # 16MB in bytes

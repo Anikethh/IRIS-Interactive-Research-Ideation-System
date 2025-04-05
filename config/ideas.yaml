@@ -1,0 +1,88 @@
+# Research briefs for hardcoded initial ideas
+# Each idea has a key and the content in markdown format
+
+ideas:
+  default: |
+    # **Physics-Informed Neural Operator Learning for Spatiotemporal Prediction of LFP Battery Degradation Mechanisms**
+
+    ## **Proposed Method**
+
+    This research proposes a novel framework based on Physics-Informed Neural Operators (PINO), specifically adapting the DeepONet or Fourier Neural Operator (FNO) architecture, to learn the complex spatiotemporal dynamics of LFP battery degradation.
+
+    **Core Idea:** Instead of modeling degradation solely as a function of time or cycle count, we aim to learn the underlying *operator* that maps spatially varying input fields (e.g., initial state-of-health distribution, spatially non-uniform temperature fields, current density distributions) and time-varying operational profiles (e.g., charging/discharging protocols) to the spatiotemporal evolution of key degradation indicators within the cell (e.g., solid-electrolyte interphase (SEI) thickness distribution, loss of active material (LAM) spatial patterns, lithium concentration profiles).
+
+    **Methodology:**
+
+    1. **Physics-Based Simulation Data Generation:** Utilize a high-fidelity electrochemical model (e.g., Pseudo-2-Dimensional, P2D model) coupled with established degradation sub-models (e.g., SEI growth kinetics based on solvent diffusion/reaction, LAM based on particle cracking or dissolution models relevant to LFP) implemented in platforms like COMSOL, PyBaMM, or DUALFOIL. Generate a diverse dataset by simulating cell operation under various:
+        - **Initial Conditions:** Spatially varying initial SEI thickness, LAM, particle size distributions.
+        - **Operating Conditions:** Different C-rates (charge/discharge), temperature profiles (including spatial gradients), Depth-of-Discharge (DoD) ranges, and complex drive cycles.
+        - **Simulation Outputs:** Collect spatiotemporal data for key variables like lithium concentration in solid/electrolyte, electrode potentials, current density distribution, SEI thickness, LAM fraction, temperature distribution, and cell terminal voltage/capacity.
+    2. **Neural Operator Architecture (e.g., Physics-Informed FNO):**
+        - **Input:** The operator network takes functions/fields as input. This includes the initial state fields (e.g., SEI(x,0), LAM(x,0)) and the time-varying boundary/operating conditions (e.g., I(t), T(x,t)).
+        - **Network Structure:** Employ an FNO architecture which efficiently learns mappings between function spaces using Fourier transforms to handle global correlations, suitable for PDE solutions. Or use a DeepONet with branch/trunk nets.
+        - **Output:** The network predicts the spatiotemporal fields of interest (e.g., SEI(x,t), LAM(x,t), Li_concentration(x,t), Voltage(t)) over the desired time horizon.
+    3. **Physics-Informed Loss Function:** Incorporate physical constraints directly into the loss function. This includes:
+        - **Data Loss:** Standard MSE loss between the PINO predictions and the simulation data (or experimental data when available) for key variables.
+        - **PDE Residual Loss:** Penalize the network if its output fields violate the governing electrochemical and degradation PDEs (e.g., charge conservation, species diffusion, SEI growth rate equations). The residuals are evaluated at collocation points sampled across the spatiotemporal domain.
+        - **Boundary/Initial Condition Loss:** Ensure the predictions satisfy the specified initial state and boundary conditions.
+    4. **Training:** Train the PINO end-to-end using the combined loss function on the generated simulation dataset. Use techniques like curriculum learning or adaptive point sampling if needed for stability and efficiency.
+
+    **Intuition & Novelty:** This approach moves beyond standard PINNs (which learn a solution for *fixed* parameters/BCs) or purely data-driven sequence models. By learning the *operator*, the PINO can rapidly predict degradation dynamics for *new, unseen* initial conditions and operating profiles without retraining, effectively acting as a surrogate for the computationally expensive physics simulator. The integration of spatial information and physics constraints ensures more accurate and physically plausible predictions of localized degradation phenomena (e.g., lithium plating hotspots, non-uniform SEI growth), which are critical for understanding failure modes but often missed by simpler models.
+
+    ## **Experiment Plan**
+
+    {'Datasets': ['**Primary:** High-fidelity simulation data generated using PyBaMM or COMSOL implementing a P2D model with LFP parameters and relevant degradation mechanisms (SEI growth, LAM). The dataset should cover a wide range of initial heterogeneities and operational profiles (varying C-rates: 0.1C to 5C; temperatures: 0°C to 50°C, including gradients; cycling protocols: constant current, drive cycles). Spatiotemporal fields (e.g., concentration, potential, SEI thickness) sampled at multiple points within the electrodes and electrolyte domains will form the core data.', '**Validation (Optional but Recommended):** Publicly available experimental LFP cycling datasets (e.g., CALCE, NASA, Sandia, Oxford Battery Degradation Dataset). While these typically lack spatial resolution, cell-level voltage and capacity data can be used to validate the integrated outputs of the PINO predictions under corresponding operational conditions. Data with spatially resolved measurements (e.g., via specialized experimental setups) would be ideal if available.'], 'Baselines': ['**1. Physics Simulation:** Direct results from the high-fidelity simulator (PyBaMM/COMSOL) used for data generation (serves as ground truth for simulation-based tests and performance upper bound).', '**2. Standard PINN:** A Physics-Informed Neural Network trained to solve the governing PDEs for a *specific* set of initial/boundary conditions.', '**3. Data-Driven Sequence Models:** Recurrent Neural Networks (LSTM/GRU) or Transformers trained on time-series data (cell voltage, capacity) derived from the simulations/experiments.', '**4. Reduced-Order Models (ROMs):** Simplified physics models like the Single Particle Model (SPM) with empirical degradation terms.', '**5. Standard Neural Operator (No Physics Loss):** An FNO or DeepONet trained only on the input-output data pairs without the PDE residual loss term.'], 'Metrics': ['**1. Spatiotemporal Field Prediction Accuracy:** Mean Squared Error (MSE) or Relative L2 Norm Error between the PINO-predicted fields (concentration, SEI thickness, LAM, etc.) and the ground truth simulation data across space and time.', '**2. Cell-Level Prediction Accuracy:** RMSE/MAE for terminal voltage prediction during discharge/charge curves and capacity fade prediction over multiple cycles.', '**3. Computational Speed-up:** Ratio of prediction time using the trained PINO vs. the time required for a full physics-based simulation for the same scenario.', '**4. Zero-Shot Prediction Performance:** Evaluate accuracy (Metrics 1 & 2) on new initial conditions and operational profiles not seen during training.', '**5. Physical Consistency:** Evaluate the magnitude of the PDE residuals produced by the PINO predictions (should be minimized by the physics loss).'], 'Ablation Studies': ['**1. Impact of Physics Loss:** Compare the performance of the full PINO against the Standard Neural Operator baseline (trained without PDE loss) to quantify the benefit of incorporating physical constraints.', '**2. Impact of Operator Architecture:**Compare performance using FNO vs. DeepONet (or other relevant operator learning architectures).', '**3. Impact of Data Density:** Train with varying amounts of simulation data (number of simulations, number of spatiotemporal sample points) to assess data requirements.', '**4. Contribution of Different Physics Terms:** Systematically remove or down-weight specific PDE terms (e.g., degradation kinetics, diffusion) from the loss function to understand their individual contribution to accuracy and stability.', '**5. Sensitivity to Input Function Representation:** Evaluate different methods for encoding the input functions/fields (e.g., discretization resolution, basis function representation).']}
+
+
+  
+  ai_for_science: |
+    # AI-Driven Scientific Discovery Platform
+    
+    ## Proposed Method
+    
+    This research proposes an integrated platform that combines machine learning approaches with scientific domain knowledge to accelerate discovery across multiple scientific disciplines. The platform would:
+    
+    1. Ingest and represent scientific literature as knowledge graphs
+    2. Apply foundation models to generate novel hypotheses
+    3. Use simulation and experimental design optimization to test hypotheses
+    4. Create feedback loops to improve hypothesis quality over time
+    
+    ## Experiment Plan
+    
+    1. Select three scientific domains with varying characteristics (e.g., materials science, drug discovery, astrophysics)
+    2. Implement domain-specific knowledge representation and reasoning modules
+    3. Train multi-modal models on domain-specific data
+    4. Evaluate hypothesis quality through expert review and experimental validation
+    5. Measure discovery acceleration metrics compared to traditional approaches
+    
+    ## Test Case Examples
+    
+    - **Case study 1:** Discovering novel battery materials with improved energy density
+    - **Case study 2:** Identifying potential drug candidates for neurodegenerative diseases
+    - **Case study 3:** Predicting exoplanet characteristics from limited observational data
+    
+  ml_interpretability: |
+    # Advanced Interpretability Methods for Scientific Machine Learning
+    
+    ## Proposed Method
+    
+    This research aims to develop novel interpretability techniques specifically designed for scientific machine learning applications where understanding the reasoning process is as important as the prediction accuracy. The approach includes:
+    
+    1. Causal modeling integration with attention mechanisms for explanation
+    2. Physics-informed neural networks with interpretable components
+    3. Symbolic regression techniques for extracting analytical expressions from learned models
+    4. Uncertainty quantification for scientific predictions
+    
+    ## Experiment Plan
+    
+    1. Develop benchmark datasets across scientific domains with known underlying mechanisms
+    2. Implement and compare various interpretability techniques
+    3. Evaluate explanations through expert assessment and comparison with ground truth mechanisms
+    4. Create visualization tools for scientists to interact with model explanations
+    5. Test integration with existing scientific workflows
+    
+    ## Test Case Examples
+    
+    - **Case study 1:** Interpreting climate models for regional predictions
+    - **Case study 2:** Explaining molecular property predictions for material design
+    - **Case study 3:** Understanding complex biological pathway predictions

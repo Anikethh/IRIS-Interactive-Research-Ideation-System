@@ -1,0 +1,15 @@
+<svg width="42" height="35" viewBox="0 0 42 35" fill="none" xmlns="http://www.w3.org/2000/svg">
+<circle cx="21" cy="4" r="3.5" stroke="black"/>
+<circle cx="10" cy="15" r="3.5" stroke="black"/>
+<circle cx="4" cy="31" r="3.5" stroke="black"/>
+<circle cx="26" cy="31" r="3.5" stroke="black"/>
+<circle cx="16" cy="31" r="3.5" stroke="black"/>
+<circle cx="38" cy="31" r="3.5" stroke="black"/>
+<circle cx="32" cy="15" r="3.5" stroke="black"/>
+<line x1="8.45691" y1="18.2031" x2="4.45691" y2="27.2031" stroke="black"/>
+<line y1="-0.5" x2="9.84886" y2="-0.5" transform="matrix(0.406138 0.913812 0.913812 -0.406138 12 18)" stroke="black"/>
+<line x1="30.4569" y1="18.2031" x2="26.4569" y2="27.2031" stroke="black"/>
+<line y1="-0.5" x2="9.84886" y2="-0.5" transform="matrix(0.406138 0.913812 0.913812 -0.406138 34 18)" stroke="black"/>
+<line y1="-0.5" x2="8.48528" y2="-0.5" transform="matrix(0.707107 0.707107 0.707107 -0.707107 24 6)" stroke="black"/>
+<line x1="18.3536" y1="6.35355" x2="12.3536" y2="12.3536" stroke="black"/>
+</svg>

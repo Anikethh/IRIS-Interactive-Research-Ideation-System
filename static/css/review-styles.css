@@ -1,0 +1,754 @@
+/* Styles for the review component */
+
+/* Review Container */
+.review-container {
+  margin: 20px 0;
+  max-width: 100%;
+  overflow-x: hidden;
+  width: 100%;
+  padding: 20px;
+  background: #ffffff;
+  margin-bottom: 20px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  display: block !important; /* Force display */
+}
+
+.review-boxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 15px;
+  padding: 0 15px;
+  flex-direction: column;
+}
+
+.review-box {
+  margin-bottom: 1rem;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.review-box:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.review-box.active {
+  border-color: #3b82f6;
+  box-shadow: 0 4px 6px rgba(59, 130, 246, 0.1);
+}
+
+.review-box-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+}
+
+.aspect-label {
+  font-weight: 600;
+  text-transform: capitalize;
+  color: #1e40af;
+}
+
+.aspect-score {
+  font-weight: 500;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.9em;
+}
+
+.review-box-body {
+  padding: 16px;
+  display: none;
+}
+
+.review-box.expanded .review-box-body {
+  display: block;
+}
+
+.review-summary {
+  margin-bottom: 12px;
+  font-style: italic;
+  color: #334155;
+}
+
+.highlight-section {
+  margin-top: 12px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 12px;
+}
+
+.highlight-category {
+  font-weight: 500;
+  color: #475569;
+  margin-bottom: 4px;
+}
+
+.highlight-text {
+  font-weight: normal;
+  background-color: #f8fafc;
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  font-family: inherit;
+  color: #334155;
+  line-height: 1.5;
+  font-size: 0.95em;
+  border-left: 3px solid #e2e8f0;
+}
+
+.highlight-review {
+  color: #64748b;
+}
+
+.review-box-actions {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.accept-btn, 
+.reject-btn {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.9em;
+  transition: all 0.2s;
+}
+
+.accept-btn {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.accept-btn:hover {
+  background: #bbf7d0;
+}
+
+.reject-btn {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.reject-btn:hover {
+  background: #fecaca;
+}
+
+.review-box.accepted {
+  border-color: #22c55e;
+}
+
+.review-box.rejected {
+  border-color: #ef4444;
+  opacity: 0.7;
+}
+
+/* Loading state */
+.review-box.loading {
+  opacity: 0.7;
+  pointer-events: none;
+  padding: 12px 16px;
+}
+
+.loading-indicator {
+  color: #64748b;
+  font-size: 0.9em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Highlight styles for each aspect */
+.highlight {
+  cursor: pointer;
+  transition: background-color 0.2s;
+  padding: 2px 0;
+}
+
+.highlight[data-aspect="novelty"] {
+  background-color: rgba(253, 224, 71, 0.3);
+}
+
+.highlight[data-aspect="feasibility"] {
+  background-color: rgba(134, 239, 172, 0.3);
+}
+
+.highlight[data-aspect="clarity"] {
+  background-color: rgba(147, 197, 253, 0.3);
+}
+
+.highlight[data-aspect="impact"] {
+  background-color: rgba(216, 180, 254, 0.3);
+}
+
+.highlight[data-aspect="methodology"] {
+  background-color: rgba(251, 146, 60, 0.3);
+}
+
+.highlight[data-aspect="lack_of_novelty"] {
+  background-color: rgba(253, 224, 71, 0.3);
+}
+
+.highlight[data-aspect="assumptions"] {
+  background-color: rgba(134, 239, 172, 0.3);
+}
+
+.highlight[data-aspect="vagueness"] {
+  background-color: rgba(147, 197, 253, 0.3);
+}
+
+.highlight[data-aspect="feasibility_and_practicality"] {
+  background-color: rgba(216, 180, 254, 0.3);
+}
+
+.highlight[data-aspect="overgeneralization"] {
+  background-color: rgba(251, 146, 60, 0.3);
+}
+
+.highlight[data-aspect="overstatement"] {
+  background-color: rgba(99, 102, 241, 0.3);
+}
+
+.highlight[data-aspect="evaluation_and_validation_issues"] {
+  background-color: rgba(244, 114, 182, 0.3);
+}
+
+.highlight[data-aspect="justification_for_methods"] {
+  background-color: rgba(20, 184, 166, 0.3);
+}
+
+.highlight[data-aspect="reproducibility"] {
+  background-color: rgba(168, 85, 247, 0.3);
+}
+
+.highlight[data-aspect="contradictory_statements"] {
+  background-color: rgba(239, 68, 68, 0.3);
+}
+
+.highlight[data-aspect="impact"] {
+  background-color: rgba(245, 158, 11, 0.3);
+}
+
+.highlight[data-aspect="alignment"] {
+  background-color: rgba(16, 185, 129, 0.3);
+}
+
+.highlight[data-aspect="ethical_and_social_considerations"] {
+  background-color: rgba(59, 130, 246, 0.3);
+}
+
+.highlight[data-aspect="robustness"] {
+  background-color: rgba(236, 72, 153, 0.3);
+}
+
+.highlight:hover {
+  filter: brightness(0.95);
+}
+
+.highlight[data-aspect="lack_of_novelty"]:hover { background-color: rgba(253, 224, 71, 0.5); }
+.highlight[data-aspect="assumptions"]:hover { background-color: rgba(134, 239, 172, 0.5); }
+.highlight[data-aspect="vagueness"]:hover { background-color: rgba(147, 197, 253, 0.5); }
+.highlight[data-aspect="feasibility_and_practicality"]:hover { background-color: rgba(216, 180, 254, 0.5); }
+.highlight[data-aspect="overgeneralization"]:hover { background-color: rgba(251, 146, 60, 0.5); }
+.highlight[data-aspect="overstatement"]:hover { background-color: rgba(99, 102, 241, 0.5); }
+.highlight[data-aspect="evaluation_and_validation_issues"]:hover { background-color: rgba(244, 114, 182, 0.5); }
+.highlight[data-aspect="justification_for_methods"]:hover { background-color: rgba(20, 184, 166, 0.5); }
+.highlight[data-aspect="reproducibility"]:hover { background-color: rgba(168, 85, 247, 0.5); }
+.highlight[data-aspect="contradictory_statements"]:hover { background-color: rgba(239, 68, 68, 0.5); }
+.highlight[data-aspect="impact"]:hover { background-color: rgba(245, 158, 11, 0.5); }
+.highlight[data-aspect="alignment"]:hover { background-color: rgba(16, 185, 129, 0.5); }
+.highlight[data-aspect="ethical_and_social_considerations"]:hover { background-color: rgba(59, 130, 246, 0.5); }
+.highlight[data-aspect="robustness"]:hover { background-color: rgba(236, 72, 153, 0.5); }
+
+/* Optional: Colorful aspect labels */
+.aspect-chip {
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #fff;
+}
+
+.aspect-chip-novelty {
+  background-color: #2196f3;
+}
+
+.aspect-chip-feasibility {
+  background-color: #4caf50;
+}
+
+.aspect-chip-clarity {
+  background-color: #ffc107;
+  color: #333;
+}
+
+.aspect-chip-impact {
+  background-color: #e91e63;
+}
+
+.aspect-chip-methodology {
+  background-color: #9c27b0;
+}
+
+/* Loading indicators */
+.review-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 20px 0;
+  font-size: 14px;
+  color: #666;
+}
+
+.loading-dots {
+  display: flex;
+  gap: 4px;
+}
+
+.loading-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #666;
+  animation: dot-flashing 1s infinite linear alternate;
+}
+
+.loading-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.loading-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes dot-flashing {
+  0% {
+    opacity: 0.2;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* Styles for the review component */
+
+/* Review Card in Chat Flow */
+.review-card {
+  margin: 10px 0;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background-color: white;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease-in-out;
+  text-align: left;
+}
+
+.review-card-header {
+  padding: 12px 16px;
+  background-color: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  text-align: left;
+  position: relative;
+}
+
+.aspect-name {
+  font-weight: 600;
+  text-transform: capitalize;
+  color: #1e40af;
+  text-align: left;
+  flex: 1;
+}
+
+.aspect-score {
+  font-weight: 500;
+  color: #64748b;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.9em;
+  text-align: center;
+  margin-right: 8px;
+  /* Remove background so we can set it dynamically */
+}
+
+.expand-toggle {
+  margin-left: auto;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+}
+
+/* Make the header area's right side more compact */
+.review-card-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.review-card-body {
+  padding: 12px 16px;
+  color: #475569;
+  text-align: left;
+}
+
+.review-summary {
+  margin-bottom: 12px;
+  font-style: italic;
+  color: #334155;
+  text-align: left;
+}
+
+.highlight-section {
+  margin-top: 12px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 12px;
+  text-align: left;
+}
+
+.highlight-category {
+  font-weight: 500;
+  color: #64748b;
+  margin-bottom: 4px;
+  font-size: 0.9em;
+  text-align: left;
+}
+
+.highlight-text {
+  font-weight: normal;
+  background-color: #f8fafc;
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  font-family: inherit;
+  color: #334155;
+  line-height: 1.5;
+  font-size: 0.95em;
+  border-left: 3px solid #e2e8f0;
+}
+
+.highlight-review {
+  color: #334155;
+  margin-top: 6px;
+  text-align: left;
+}
+
+/* Review Card Actions */
+.review-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 16px;
+  background-color: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  text-align: right;
+}
+
+.accept-btn, .reject-btn {
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.accept-btn {
+  background-color: #dcfce7;
+  color: #16a34a;
+}
+
+.accept-btn:hover {
+  background-color: #bbf7d0;
+  transform: translateY(-1px);
+}
+
+.reject-btn {
+  background-color: #fee2e2;
+  color: #dc2626;
+}
+
+.reject-btn:hover {
+  background-color: #fecaca;
+  transform: translateY(-1px);
+}
+
+/* Review states */
+.review-card.accepted {
+  border-left: 4px solid #16a34a;
+}
+
+.review-card.accepted .accept-btn {
+  background-color: #16a34a;
+}
+
+.review-card.accepted .accept-btn img {
+  filter: brightness(0) invert(1);
+}
+
+.review-card.rejected {
+  border-left: 4px solid #dc2626;
+  opacity: 0.7;
+}
+
+.review-card.rejected .reject-btn {
+  background-color: #dc2626;
+}
+
+.review-card.rejected .reject-btn img {
+  filter: brightness(0) invert(1);
+}
+
+/* Review card states */
+.review-card.completed {
+  opacity: 0.7;
+  pointer-events: none;
+  background-color: #f0fdf4;
+  border-color: #22c55e;
+}
+
+.review-card.completed .review-card-header {
+  background-color: #dcfce7;
+}
+
+.review-card.completed .review-card-actions {
+  display: none !important;
+}
+
+/* Loading styles */
+.review-loading {
+  padding: 10px;
+  color: #6b7280;
+  font-style: italic;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+}
+
+/* Loading animation */
+@keyframes loading-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+.review-loading::after {
+  content: "...";
+  display: inline-block;
+  animation: loading-pulse 1.5s infinite;
+}
+
+/* Improve Idea button */
+.improve-idea-container {
+  margin: 20px 0;
+  text-align: left;
+}
+
+.improve-idea-btn {
+  width: 100%;
+  padding: 12px;
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.improve-idea-btn:hover {
+  background-color: #1e40af;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.improve-idea-btn:disabled {
+  background-color: #94a3b8;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Text highlights in main idea panel */
+.highlight {
+  cursor: pointer;
+  transition: background-color 0.2s;
+  padding: 2px 0;
+}
+
+.highlight[data-aspect="novelty"] {
+  background-color: rgba(253, 224, 71, 0.3);
+}
+
+.highlight[data-aspect="feasibility"] {
+  background-color: rgba(134, 239, 172, 0.3);
+}
+
+.highlight[data-aspect="clarity"] {
+  background-color: rgba(147, 197, 253, 0.3);
+}
+
+.highlight[data-aspect="impact"] {
+  background-color: rgba(216, 180, 254, 0.3);
+}
+
+.highlight[data-aspect="methodology"] {
+  background-color: rgba(251, 146, 60, 0.3);
+}
+
+.highlight[data-aspect="lack_of_novelty"] {
+  background-color: rgba(253, 224, 71, 0.3);
+}
+
+.highlight[data-aspect="assumptions"] {
+  background-color: rgba(134, 239, 172, 0.3);
+}
+
+.highlight[data-aspect="vagueness"] {
+  background-color: rgba(147, 197, 253, 0.3);
+}
+
+.highlight[data-aspect="feasibility_and_practicality"] {
+  background-color: rgba(216, 180, 254, 0.3);
+}
+
+.highlight[data-aspect="overgeneralization"] {
+  background-color: rgba(251, 146, 60, 0.3);
+}
+
+.highlight[data-aspect="overstatement"] {
+  background-color: rgba(99, 102, 241, 0.3);
+}
+
+.highlight[data-aspect="evaluation_and_validation_issues"] {
+  background-color: rgba(244, 114, 182, 0.3);
+}
+
+.highlight[data-aspect="justification_for_methods"] {
+  background-color: rgba(20, 184, 166, 0.3);
+}
+
+.highlight[data-aspect="reproducibility"] {
+  background-color: rgba(168, 85, 247, 0.3);
+}
+
+.highlight[data-aspect="contradictory_statements"] {
+  background-color: rgba(239, 68, 68, 0.3);
+}
+
+.highlight[data-aspect="impact"] {
+  background-color: rgba(245, 158, 11, 0.3);
+}
+
+.highlight[data-aspect="alignment"] {
+  background-color: rgba(16, 185, 129, 0.3);
+}
+
+.highlight[data-aspect="ethical_and_social_considerations"] {
+  background-color: rgba(59, 130, 246, 0.3);
+}
+
+.highlight[data-aspect="robustness"] {
+  background-color: rgba(236, 72, 153, 0.3);
+}
+
+.highlight:hover {
+  filter: brightness(0.95);
+}
+
+.highlight[data-aspect="lack_of_novelty"]:hover { background-color: rgba(253, 224, 71, 0.5); }
+.highlight[data-aspect="assumptions"]:hover { background-color: rgba(134, 239, 172, 0.5); }
+.highlight[data-aspect="vagueness"]:hover { background-color: rgba(147, 197, 253, 0.5); }
+.highlight[data-aspect="feasibility_and_practicality"]:hover { background-color: rgba(216, 180, 254, 0.5); }
+.highlight[data-aspect="overgeneralization"]:hover { background-color: rgba(251, 146, 60, 0.5); }
+.highlight[data-aspect="overstatement"]:hover { background-color: rgba(99, 102, 241, 0.5); }
+.highlight[data-aspect="evaluation_and_validation_issues"]:hover { background-color: rgba(244, 114, 182, 0.5); }
+.highlight[data-aspect="justification_for_methods"]:hover { background-color: rgba(20, 184, 166, 0.5); }
+.highlight[data-aspect="reproducibility"]:hover { background-color: rgba(168, 85, 247, 0.5); }
+.highlight[data-aspect="contradictory_statements"]:hover { background-color: rgba(239, 68, 68, 0.5); }
+.highlight[data-aspect="impact"]:hover { background-color: rgba(245, 158, 11, 0.5); }
+.highlight[data-aspect="alignment"]:hover { background-color: rgba(16, 185, 129, 0.5); }
+.highlight[data-aspect="ethical_and_social_considerations"]:hover { background-color: rgba(59, 130, 246, 0.5); }
+.highlight[data-aspect="robustness"]:hover { background-color: rgba(236, 72, 153, 0.5); }
+
+/* Improved idea styling */
+.improved-idea {
+  background-color: #f0f9ff;
+  border-left: 4px solid #38bdf8;
+  padding: 12px;
+  margin: 12px 0;
+  border-radius: 4px;
+}
+
+.improved-idea ul {
+  margin-left: 20px;
+  padding-left: 0;
+}
+
+.improved-idea li {
+  margin-bottom: 8px;
+}
+
+.improved-idea hr {
+  border: none;
+  border-top: 1px solid #e2e8f0;
+  margin: 16px 0;
+}
+
+/* Message container styling */
+.review-message-container {
+  margin: 15px 0;
+  text-align: left;
+}
+
+/* Special styling for the review message in chat */
+[data-sender="system"].review-message-container {
+  background: transparent;
+  padding: 0;
+  text-align: left;
+}
+
+/* Success and error message styling */
+.success-message {
+  background-color: #f0fdf4;
+  border-left: 4px solid #16a34a;
+  color: #16a34a;
+  padding: 12px 16px;
+  margin: 12px 0;
+  border-radius: 4px;
+  text-align: left;
+}
+
+.error-message {
+  background-color: #fef2f2;
+  border-left: 4px solid #dc2626;
+  color: #dc2626;
+  padding: 12px 16px;
+  margin: 12px 0;
+  border-radius: 4px;
+  text-align: left;
+}

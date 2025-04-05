@@ -1,0 +1,10 @@
+pip install 'ai2-scholar-qa[all]'
+pip install flask
+pip install loguru
+pip install retry
+pip install groq
+pip install ollama
+# PyMuPDF
+pip install fitz
+pip install frontend
+pip install tools

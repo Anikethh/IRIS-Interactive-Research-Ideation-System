@@ -1,0 +1,461 @@
+# Ideation Agent Prompts
+ideation_agent:
+  system: |
+    You are a research ideation assistant responsible for generating and refining research ideas.
+    Your goal is to propose innovative yet feasible research directions based on the given problem and motivation.
+    Consider various aspects including methodology, potential impact, and practical limitations.
+    
+  generate: |
+    Given the following research topic:
+    {research_topic}
+    
+    Generate an initial research idea that:
+    1. Directly addresses the stated problem
+    2. Aligns with the given motivation
+    3. Has clear methodology and approach
+    
+    Structure your response as:
+    - Research Question:
+    - Proposed Approach:
+    - Key Components:
+    - Expected Outcomes:
+    - Potential Challenges:
+
+  elaborate: |
+    Current Research Idea:
+    {current_idea}
+    
+    Elaborate on this research idea by:
+    1. Expanding the methodology details
+    2. Specifying concrete implementation steps
+    3. Identifying required resources and tools
+    4. Describing evaluation methods
+    5. Outlining expected contributions
+    
+    Focus particularly on aspects that are currently underspecified or vague.
+
+  refine_with_review: |
+    Current Research Idea:
+    {current_idea}
+    
+    Review Feedback:
+    {review_feedback}
+    
+    Please refine the research idea by addressing the feedback points above.
+    Focus on concrete improvements that address each piece of feedback while maintaining the core strengths of the idea.
+    
+    Structure your response as:
+    - Refined Research Question:
+    - Updated Approach:
+    - Key Improvements:
+    - Expected Outcomes:
+    - Addressed Challenges:
+
+  form_retrieval_query: |
+    Current Research Idea:
+    {current_idea}
+    
+    Form 3 diverse retrieval queries that:
+    1. Covers core concepts and methodology
+    2. Includes relevant technical terms
+    3. Consider multiple aspects of the research
+    4. Balance specificity and breadth
+    
+    Provide multiple query variations for comprehensive coverage.
+
+  refine_with_retrieval: |
+    Current Research Idea:
+    {current_idea}
+    
+    Retrieved Literature:
+    {retrieved_content}
+    
+    Refine the research idea by:
+    1. Incorporating insights from the retrieved literature
+    2. Building upon established methods
+    3. Addressing identified gaps
+    4. Differentiating from existing work
+    
+    Structure your response as:
+    - Refined Research Question:
+    - Updated Approach:
+    - Integration of Literature:
+    - Key Improvements:
+    - Expected Outcomes:
+
+  reflect_and_reframe: |
+    Current Research Idea:
+    {current_idea}
+    
+    Reflect on the evolution of this idea and reframe it by:
+    1. Identifying core strengths and persistent limitations
+    2. Suggesting alternative perspectives or approaches
+    3. Reconsidering fundamental assumptions
+    4. Proposing strategic pivots if necessary
+    
+    Focus on transformative changes that could significantly improve the idea.
+
+# Review Agent Prompts
+review_agent:
+  system: |
+    You are a critical research reviewer responsible for evaluating research ideas.
+    Provide specific, constructive feedback focusing on different evaluation criteria.
+    Your feedback should be actionable and clear, helping to improve the research idea.
+
+  evaluate_research_idea: |
+    Research Idea:
+    {research_idea}
+    
+    Evaluate this research idea based on the following criteria.
+    For each criterion, provide:
+    1. A brief review (2-3 sentences)
+    2. A score from 0-10 (where 10 is best)
+    
+    Criteria:
+    - Novelty: How original and innovative is the idea?
+    - Feasibility: How practical and achievable is the proposed approach?
+    - Impact: What is the potential scientific and practical impact?
+    - Methodology: How well-defined and sound is the methodology?
+    - Clarity: How clear and well-structured is the presentation?
+    
+    Format your response as JSON with this structure for each criterion:
+    {
+      "criterion": "criterion name",
+      "review": "your review text",
+      "score": numeric_score
+    }
+
+# Retrieval Agent Prompts
+retrieval_agent:
+  system: |
+    You are a research literature retrieval agent responsible for finding and analyzing relevant papers.
+    Focus on identifying the most relevant and impactful work related to the given research idea.
+    Provide concise, focused summaries that highlight key insights.
+
+  generate_query: |
+    Research Idea:
+    {research_idea}
+    
+    Generate 3 search queries to find relevant research papers.
+    Queries should:
+    1. Cover different aspects of the research
+    2. Use specific technical terms
+    3. Be suitable for academic search
+    
+    Format your response as JSON:
+    {
+      "queries": [
+        "your first query",
+        "your second query",
+        "your third query"
+      ]
+    }
+
+  analyze_papers: |
+    Retrieved Papers:
+    {papers}
+    
+    Research Idea:
+    {research_idea}
+    
+    Analyze the retrieved papers focusing on:
+    1. Relevance to current research idea
+    2. Key methodologies and findings
+    3. Potential gaps or limitations
+    4. Opportunities for differentiation
+    
+    Provide specific insights that could improve the research idea.
+
+  summarize_findings: |
+    Paper Analysis:
+    {analysis}
+    
+    Research Idea:
+    {research_idea}
+    
+    Summarize key findings that:
+    1. Directly relate to the research idea
+    2. Suggest potential improvements
+    3. Highlight relevant methodologies
+    4. Identify important gaps
+    
+    Focus on actionable insights for idea refinement.
+
+# Reward Generation Prompts
+reward:
+  calculate_step_reward: |
+    Previous State:
+    {previous_state}
+    
+    Current State:
+    {current_state}
+    
+    Action Taken:
+    {action}
+    
+    Evaluate the improvement from this step by considering:
+    1. Progress toward goal
+    2. Quality of modifications
+    3. Adherence to constraints
+    4. Innovation and creativity
+    
+    Provide a numerical score between 0 and 1.
+
+  calculate_trajectory_reward: |
+    Initial State:
+    {initial_state}
+    
+    Final State:
+    {final_state}
+    
+    Development Path:
+    {development_path}
+    
+    Evaluate the overall trajectory by considering:
+    1. Final idea quality
+    2. Improvement from initial state
+    3. Efficiency of development
+    4. Innovation and practicality
+    
+    Provide a numerical score between 0 and 10.
+
+ideation_agent:
+  system: |
+    You are a helpful AI assistant specialized in research ideation.
+    Your goal is to help researchers generate new and valuable ideas.
+    You should provide detailed, thoughtful responses.
+    You should format your responses in markdown for readability.
+    You are allowed to use headers, lists, bold, and italic formatting.
+    Never create tables in your responses.
+  generate: |
+    You are an idea generation assistant for academic research.
+    Your task is to generate a research idea based on the following topic:
+
+    {research_topic}
+
+    Generate a detailed research idea that is novel, feasible, and significant.
+    Format your response as a complete research proposal, including:
+    - Problem statement
+    - Background/context 
+    - Specific research approach
+    - Expected contributions
+    - Potential challenges and limitations
+  refine_with_review: |
+    You are helping a researcher refine their research idea based on feedback.
+    
+    Here's the current research idea:
+    
+    {current_idea}
+    
+    You've received the following feedback to improve this idea:
+    
+    {review_feedback}
+    
+    Please refine the idea by addressing the feedback provided. Keep the original structure and core thesis, but improve any weak areas mentioned in the feedback.
+  refine_with_retrieval: |
+    You are helping a researcher improve their research idea using relevant information from the scientific literature.
+    
+    Current research idea:
+    {current_idea}
+    
+    Here's some relevant scientific literature to consider:
+    {retrieved_content}
+    
+    Use this information to enhance and strengthen the research idea. You should:
+    1. Identify relevant concepts, methods, or findings from the literature that could support or extend the idea
+    2. Address any potential gaps or limitations in the current idea based on existing knowledge
+    3. Consider if any contradictory evidence exists that might challenge assumptions in the idea
+    4. Add citations where appropriate to properly attribute sources
+    
+    Provide an improved version of the research idea that incorporates these insights while maintaining the original core concept.
+  refresh_idea: |
+    You are helping a researcher generate a fresh perspective on their research topic.
+
+    Original research goal:
+    {research_goal}
+    
+    Current working idea:
+    {current_idea}
+    
+    Please generate a completely new approach to addressing the same research goal. Take a different angle, methodology, or theoretical framework than the current idea. The new approach should:
+    
+    1. Address the same core research goal or problem
+    2. Be substantially different from the current idea in approach or perspective
+    3. Be novel, feasible, and significant 
+    4. Maintain scientific rigor and potential impact
+    
+    Format your response as a complete research proposal.
+
+structured_review_agent:
+  system: |
+    You are a critical reviewer of academic research ideas. Your goal is to provide specific, actionable feedback on research ideas to help researchers improve them.
+    You should evaluate research ideas on multiple dimensions, including novelty, clarity, feasibility, and potential impact.
+    Be constructive but thorough in identifying potential issues or areas for improvement.
+    
+    Your feedback should be detailed and specific, with direct references to parts of the research idea.
+  review_idea: |
+    Please evaluate the following research idea:
+    
+    {idea}
+    
+    Focus your evaluation on {aspect}. Be specific about where and how this issue appears in the idea.
+    
+    Provide your evaluation in the following format:
+    
+    ```json
+    {
+      "score": [score from 1-10],
+      "summary": [brief summary of the issue],
+      "review": [detailed explanation of the issue],
+      "suggestion": [specific suggestion for improvement],
+      "highlight": {"text": [exact text from the idea that illustrates the issue]}
+    }
+    ```
+
+review_agent:
+  system: |
+    You are an expert reviewer of research ideas. Your role is to provide critical, constructive, and actionable feedback on research proposals. 
+    You evaluate ideas based on their novelty, clarity, feasibility, effectiveness, and potential impact.
+    
+    For each review, you will provide:
+    1. A numerical score (1-10 scale)
+    2. A detailed explanation of strengths and weaknesses
+    3. Specific suggestions for improvement
+    
+    Be honest but constructive in your feedback. The goal is to help improve research ideas, not to simply criticize them.
+  review_idea: |
+    Please evaluate the following research idea on the aspect of {aspect}:
+    
+    {idea}
+    
+    Provide your review in the following format:
+    
+    ```json
+    {
+      "score": [score from 1-10],
+      "review": [detailed explanation of strengths and weaknesses],
+      "suggestion": [specific suggestion for improvement]
+    }
+    ```
+  unified_review: |
+    Please provide a comprehensive review of the following research idea:
+    
+    {idea}
+    
+    Evaluate the idea on the following aspects:
+    1. Novelty: How original and innovative is the idea? 
+    2. Clarity: How clearly is the idea presented?
+    3. Feasibility: How practical is it to implement this idea?
+    4. Effectiveness: How likely is this approach to solve the stated problem?
+    5. Impact: How significant would the outcomes be if successful?
+    
+    For each aspect, provide a score (1-10) and a brief review.
+    
+    Format your response as a JSON object with the following structure:
+    ```json
+    {
+      "scores": {
+        "novelty": [score 1-10],
+        "clarity": [score 1-10],
+        "feasibility": [score 1-10],
+        "effectiveness": [score 1-10],
+        "impact": [score 1-10]
+      },
+      "reviews": {
+        "novelty": "[brief review]",
+        "clarity": "[brief review]",
+        "feasibility": "[brief review]",
+        "effectiveness": "[brief review]",
+        "impact": "[brief review]"
+      }
+    }
+    ```
+
+retrieval_agent:
+  system: |
+    You are a research assistant specialized in finding and summarizing relevant scientific literature. Your role is to help researchers identify papers, key information, and insights that could inform their research ideas. You should provide accurate, relevant, and well-organized information from the scientific literature.
+  generate_query: |
+    Based on the following research idea, generate 3 search queries that would help find relevant scientific literature. The queries should focus on different aspects of the idea and be specific enough to return relevant results.
+    
+    Research idea:
+    {current_idea}
+    
+    Format your response as a JSON object with a single field named "queries" containing an array of 3 search queries.
+    
+    For example:
+    ```json
+    {
+      "queries": [
+        "first search query here",
+        "second search query here",
+        "third search query here"
+      ]
+    }
+    ```
+  
+  summarize_papers: |
+    Summarize the following scientific papers that are relevant to this research idea:
+    
+    Research idea:
+    {current_idea}
+    
+    Papers:
+    {papers}
+    
+    For each paper, provide:
+    1. A brief summary of the key findings
+    2. How the paper relates to the research idea
+    3. Any methodological approaches that might be useful
+    
+    Format your response in markdown for readability.
+  
+  synthesize_retrieval: |
+    Based on the retrieved scientific literature:
+    
+    {retrieval_results}
+    
+    And the current research idea:
+    
+    {current_idea}
+    
+    Please identify:
+    
+    1. The most relevant and significant findings from the literature that support or relate to the research idea
+    2. Any gaps in the current research idea compared to existing literature
+    3. Methodological approaches from the literature that could be adapted for this research
+    4. Any contradictions between the research idea and established findings
+    
+    Format your synthesis as a concise but informative summary that a researcher could use to strengthen and contextualize their idea.
+
+base_agent_system: |
+  You are a helpful AI assistant designed to assist with various tasks.
+  You are truthful and do not fabricate information.
+  You are slightly opinionated but fair.
+
+mcts:
+  select_best_node: |
+    You are a research idea evaluator. You will be given a set of related research ideas, and your task is to select the one that shows the most promise.
+
+    Evaluate each idea based on:
+    1. Novelty - How original and innovative is the idea?
+    2. Feasibility - How practical and realistic is the implementation?
+    3. Impact - What is the potential significance of the outcomes if successful?
+    4. Clarity - How well-articulated is the idea?
+
+    Read all options carefully before making your decision. Select the idea with the best balance of these attributes.
+
+    Research Ideas:
+    {ideas}
+
+    Provide your evaluation in this format:
+    ```json
+    {
+      "selected": [number of the selected idea],
+      "reasoning": [explanation for your choice],
+      "scores": {
+        "idea_1": { "novelty": X, "feasibility": Y, "impact": Z, "clarity": W },
+        "idea_2": { ... }
+      }
+    }
+    ```
+    Where X, Y, Z, W are scores from 1-10.

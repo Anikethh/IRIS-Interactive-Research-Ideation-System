@@ -1,0 +1,40 @@
+{
+  "logs": {
+    "log_dir": "logs",
+    "log_level": "INFO",
+    "llm_cache_dir": "llm_cache",
+    "event_trace_loc": "scholarqa_traces",
+    "tracing_mode": "local"
+  },
+  "run_config": {
+    "retrieval_service": "public_api",
+    "retriever_args": {
+      "n_retrieval": 256,
+      "n_keyword_srch": 20
+    },
+    "reranker_service": "modal",
+    "reranker_args": {
+      "app_name": "modal_app_name",
+      "api_name": "modal_api_name",
+      "batch_size": 256,
+      "gen_options": {}
+    },
+    "paper_finder_args": {
+      "n_rerank": 50,
+      "context_threshold": 0.5
+    },
+    "pipeline_args": {
+      "validate": true,
+      "llm": "anthropic/claude-3-5-sonnet-20241022",
+      "fallback_llm": "openai/gpt-4o",
+      "decomposer_llm": "anthropic/claude-3-5-sonnet-20241022"
+    }
+  },
+  "reranker": {
+    "type": "huggingface",
+    "params": {
+      "model_name": "cross-encoder/ms-marco-MiniLM-L-6-v2",
+      "batch_size": 16
+    }
+  }
+}
