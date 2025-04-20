@@ -26,6 +26,7 @@ mcts:
   exploration_constant: 1.414
   max_iterations: 100
   max_depth: 10
+  discount_factor: 0.9
 
 # LLM agent configuration
 llm_agent:
@@ -38,6 +39,18 @@ llm_agent:
 default_models:
   llm: "gemini/gemini-2.0-flash-lite"
   reranker: "cross-encoder/ms-marco-MiniLM-L-6-v2"
+
+ideation_agent:
+  # model: "gemini/gemini-2.0-flash-lite"
+  # model: "gemini/gemini-2.0-flash"
+  model: "gemini/gemini-2.5-pro-exp-03-25"
+  max_tokens: 512
+  temperature: 0.7
+  top_p: 0.9
+
+review_agent:
+  model: "gemini/gemini-2.0-flash-lite"
+  # model: "gemini/gemini-2.0-flash"
 
 # Retrieval agent configuration
 retrieval_agent:
