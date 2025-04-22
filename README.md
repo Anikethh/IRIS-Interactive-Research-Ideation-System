@@ -1,6 +1,8 @@
 # IRIS - Interactive Research Ideation System
 
-## Setup
+![IRIS Diagram](assets/Diagram.png)
+
+## 🔗 Setup
 
 This project uses ```uv``` for package management, but you can use any virtual environment.
 
@@ -26,13 +28,15 @@ This project uses ```uv``` for package management, but you can use any virtual e
     export GEMINI_API_KEY="your_google_gemini_api_key" 
     ```
 
-## Running the Application
+## ▶️ Running the Application
 
 Ensure your virtual environment is activated, then run:
 
 ```bash
 python app.py
 ```
+
+![IRIS Interface](assets/Interface.png)
 
 ## 🚀 Features
 
