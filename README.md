@@ -44,6 +44,6 @@ python app.py
 ## 📋 Requirements
 
 - Semantic Scholar API Key
-- Key for any LLM API service provided by LiteLLM
+-  LLM API Key for any provider supported by LiteLLM
 
 ## 📧 Cite
