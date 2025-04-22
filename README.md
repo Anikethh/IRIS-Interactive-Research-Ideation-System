@@ -2,7 +2,7 @@
 
 ## Setup
 
-This project uses [uv] for package management, but you can use any virtual environment.
+This project uses ```uv``` for package management, but you can use any virtual environment.
 
 1.  **Clone the repository:**
     ```bash
