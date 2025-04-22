@@ -1,6 +1,48 @@
-# IRIS: Interactive Research Ideation System
+# IRIS - Interactive Research Ideation System
 
-IRIS is an AI research and experimentation framework that integrates with various LLM APIs to conduct structured experiments using Monte Carlo Tree Search (MCTS) techniques.
+## Setup
+
+This project uses [uv](https://github.com/astral-sh/uv) for package management.
+
+1.  **Clone the repository:**
+    ```bash
+    git clone <repository-url>
+    cd IRIS-Interactive-Research-Ideation-System
+    ```
+
+2.  **Create a virtual environment:**
+    ```bash
+    uv venv
+    ```
+
+3.  **Activate the virtual environment:**
+    *   macOS/Linux:
+        ```bash
+        source .venv/bin/activate
+        ```
+    *   Windows (CMD):
+        ```cmd
+        .venv\Scripts\activate.bat
+        ```
+    *   Windows (PowerShell):
+        ```powershell
+        .venv\Scripts\Activate.ps1
+        ```
+
+4.  **Install dependencies:**
+    ```bash
+    uv sync
+    ```
+
+## Running the Application
+
+Once the setup is complete and the virtual environment is activated:
+
+```bash
+python app.py
+```
+
+*(Please replace `<repository-url>` with the actual URL once you host it on GitHub)*
 
 ## 🚀 Features
 

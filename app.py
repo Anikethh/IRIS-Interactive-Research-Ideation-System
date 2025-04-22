@@ -28,7 +28,7 @@ from scholarqa.rag.reranker.modal_engine import ModalReranker
 from scholarqa.rag.reranker.modal_engine import HuggingFaceReranker
 import fitz  # PyMuPDF for PDF parsing
 # Import the key manager
-from src.utils.key_manager import encrypt_api_key, decrypt_api_key, get_client_encryption_script
+# from src.utils.key_manager import encrypt_api_key, decrypt_api_key, get_client_encryption_script
 
 # Prompting techniques to reduce hallucinations in LLMs
 
