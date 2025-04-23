@@ -28,7 +28,7 @@ This project uses ```uv``` for package management, but you can use any virtual e
     export GEMINI_API_KEY="your_google_gemini_api_key" 
     ```
 
-## ▶️ Running the Application
+## 🖥️ Running the Application
 
 Ensure your virtual environment is activated, then run:
 
@@ -37,13 +37,6 @@ python app.py
 ```
 
 ![IRIS Interface](assets/Interface.png)
-
-## 🚀 Features
-
-- Monte Carlo Tree Search for AI agent experimentation
-- Integration with multiple LLM providers (Google AI Studio, Hugging Face etc.)
-- Structured retrieval and analysis pipelines
-- Experiment tracking and result visualization
 
 ## 📋 Requirements
 
