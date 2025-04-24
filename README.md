@@ -1,5 +1,7 @@
 # IRIS - Interactive Research Ideation System
 
+Official repository for the paper [IRIS](https://arxiv.org/abs/2504.16728)
+
 ![IRIS Diagram](assets/Diagram.png)
 
 ## 🔗 Setup
@@ -14,10 +16,7 @@ This project uses ```uv``` for package management, but you can use any virtual e
 
 2.  **Activate virtual environment:**
     ```bash
-    # Sync environment
     uv sync
-
-    # Activate
     source .venv/bin/activate 
     ```
 
@@ -44,3 +43,14 @@ python app.py
 -  LLM API Key for any provider supported by LiteLLM
 
 ## 📧 Cite
+```
+@misc{garikaparthi2025irisinteractiveresearchideation,
+      title={IRIS: Interactive Research Ideation System for Accelerating Scientific Discovery}, 
+      author={Aniketh Garikaparthi and Manasi Patwardhan and Lovekesh Vig and Arman Cohan},
+      year={2025},
+      eprint={2504.16728},
+      archivePrefix={arXiv},
+      primaryClass={cs.AI},
+      url={https://arxiv.org/abs/2504.16728}, 
+}
+```
