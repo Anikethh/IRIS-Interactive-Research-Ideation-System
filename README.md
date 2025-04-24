@@ -1,6 +1,6 @@
 # IRIS - Interactive Research Ideation System
 
-Official repository for the paper [IRIS](https://arxiv.org/abs/2504.16728)
+Official repository for the paper [IRIS](https://arxiv.org/abs/2504.16728).
 
 ![IRIS Diagram](assets/Diagram.png)
 
