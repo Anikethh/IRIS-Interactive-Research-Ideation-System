@@ -1,8 +1,7 @@
-# Research briefs for hardcoded initial ideas
-# Each idea has a key and the content in markdown format
+# Selected Research Briefs
 
 ideas:
-  default: |
+  physics: |
     # **Physics-Informed Neural Operator Learning for Spatiotemporal Prediction of LFP Battery Degradation Mechanisms**
 
     ## **Proposed Method**
@@ -32,57 +31,301 @@ ideas:
     ## **Experiment Plan**
 
     {'Datasets': ['**Primary:** High-fidelity simulation data generated using PyBaMM or COMSOL implementing a P2D model with LFP parameters and relevant degradation mechanisms (SEI growth, LAM). The dataset should cover a wide range of initial heterogeneities and operational profiles (varying C-rates: 0.1C to 5C; temperatures: 0°C to 50°C, including gradients; cycling protocols: constant current, drive cycles). Spatiotemporal fields (e.g., concentration, potential, SEI thickness) sampled at multiple points within the electrodes and electrolyte domains will form the core data.', '**Validation (Optional but Recommended):** Publicly available experimental LFP cycling datasets (e.g., CALCE, NASA, Sandia, Oxford Battery Degradation Dataset). While these typically lack spatial resolution, cell-level voltage and capacity data can be used to validate the integrated outputs of the PINO predictions under corresponding operational conditions. Data with spatially resolved measurements (e.g., via specialized experimental setups) would be ideal if available.'], 'Baselines': ['**1. Physics Simulation:** Direct results from the high-fidelity simulator (PyBaMM/COMSOL) used for data generation (serves as ground truth for simulation-based tests and performance upper bound).', '**2. Standard PINN:** A Physics-Informed Neural Network trained to solve the governing PDEs for a *specific* set of initial/boundary conditions.', '**3. Data-Driven Sequence Models:** Recurrent Neural Networks (LSTM/GRU) or Transformers trained on time-series data (cell voltage, capacity) derived from the simulations/experiments.', '**4. Reduced-Order Models (ROMs):** Simplified physics models like the Single Particle Model (SPM) with empirical degradation terms.', '**5. Standard Neural Operator (No Physics Loss):** An FNO or DeepONet trained only on the input-output data pairs without the PDE residual loss term.'], 'Metrics': ['**1. Spatiotemporal Field Prediction Accuracy:** Mean Squared Error (MSE) or Relative L2 Norm Error between the PINO-predicted fields (concentration, SEI thickness, LAM, etc.) and the ground truth simulation data across space and time.', '**2. Cell-Level Prediction Accuracy:** RMSE/MAE for terminal voltage prediction during discharge/charge curves and capacity fade prediction over multiple cycles.', '**3. Computational Speed-up:** Ratio of prediction time using the trained PINO vs. the time required for a full physics-based simulation for the same scenario.', '**4. Zero-Shot Prediction Performance:** Evaluate accuracy (Metrics 1 & 2) on new initial conditions and operational profiles not seen during training.', '**5. Physical Consistency:** Evaluate the magnitude of the PDE residuals produced by the PINO predictions (should be minimized by the physics loss).'], 'Ablation Studies': ['**1. Impact of Physics Loss:** Compare the performance of the full PINO against the Standard Neural Operator baseline (trained without PDE loss) to quantify the benefit of incorporating physical constraints.', '**2. Impact of Operator Architecture:**Compare performance using FNO vs. DeepONet (or other relevant operator learning architectures).', '**3. Impact of Data Density:** Train with varying amounts of simulation data (number of simulations, number of spatiotemporal sample points) to assess data requirements.', '**4. Contribution of Different Physics Terms:** Systematically remove or down-weight specific PDE terms (e.g., degradation kinetics, diffusion) from the loss function to understand their individual contribution to accuracy and stability.', '**5. Sensitivity to Input Function Representation:** Evaluate different methods for encoding the input functions/fields (e.g., discretization resolution, basis function representation).']}
+  chemistry: |
+    # **Physics-Informed Neural Operator Learning for Spatiotemporal Prediction of LFP Battery Degradation Mechanisms**
 
+    ## **Proposed Method**
 
-  
-  ai_for_science: |
-    # AI-Driven Scientific Discovery Platform
-    
-    ## Proposed Method
-    
-    This research proposes an integrated platform that combines machine learning approaches with scientific domain knowledge to accelerate discovery across multiple scientific disciplines. The platform would:
-    
-    1. Ingest and represent scientific literature as knowledge graphs
-    2. Apply foundation models to generate novel hypotheses
-    3. Use simulation and experimental design optimization to test hypotheses
-    4. Create feedback loops to improve hypothesis quality over time
-    
-    ## Experiment Plan
-    
-    1. Select three scientific domains with varying characteristics (e.g., materials science, drug discovery, astrophysics)
-    2. Implement domain-specific knowledge representation and reasoning modules
-    3. Train multi-modal models on domain-specific data
-    4. Evaluate hypothesis quality through expert review and experimental validation
-    5. Measure discovery acceleration metrics compared to traditional approaches
-    
-    ## Test Case Examples
-    
-    - **Case study 1:** Discovering novel battery materials with improved energy density
-    - **Case study 2:** Identifying potential drug candidates for neurodegenerative diseases
-    - **Case study 3:** Predicting exoplanet characteristics from limited observational data
-    
-  ml_interpretability: |
-    # Advanced Interpretability Methods for Scientific Machine Learning
-    
-    ## Proposed Method
-    
-    This research aims to develop novel interpretability techniques specifically designed for scientific machine learning applications where understanding the reasoning process is as important as the prediction accuracy. The approach includes:
-    
-    1. Causal modeling integration with attention mechanisms for explanation
-    2. Physics-informed neural networks with interpretable components
-    3. Symbolic regression techniques for extracting analytical expressions from learned models
-    4. Uncertainty quantification for scientific predictions
-    
-    ## Experiment Plan
-    
-    1. Develop benchmark datasets across scientific domains with known underlying mechanisms
-    2. Implement and compare various interpretability techniques
-    3. Evaluate explanations through expert assessment and comparison with ground truth mechanisms
-    4. Create visualization tools for scientists to interact with model explanations
-    5. Test integration with existing scientific workflows
-    
-    ## Test Case Examples
-    
-    - **Case study 1:** Interpreting climate models for regional predictions
-    - **Case study 2:** Explaining molecular property predictions for material design
-    - **Case study 3:** Understanding complex biological pathway predictions
+    This research proposes a novel framework based on Physics-Informed Neural Operators (PINO), specifically adapting the DeepONet or Fourier Neural Operator (FNO) architecture, to learn the complex spatiotemporal dynamics of LFP battery degradation.
+
+    **Core Idea:** Instead of modeling degradation solely as a function of time or cycle count, we aim to learn the underlying *operator* that maps spatially varying input fields (e.g., initial state-of-health distribution, spatially non-uniform temperature fields, current density distributions) and time-varying operational profiles (e.g., charging/discharging protocols) to the spatiotemporal evolution of key degradation indicators within the cell (e.g., solid-electrolyte interphase (SEI) thickness distribution, loss of active material (LAM) spatial patterns, lithium concentration profiles).
+
+    **Methodology:**
+
+    1. **Physics-Based Simulation Data Generation:** Utilize a high-fidelity electrochemical model (e.g., Pseudo-2-Dimensional, P2D model) coupled with established degradation sub-models (e.g., SEI growth kinetics based on solvent diffusion/reaction, LAM based on particle cracking or dissolution models relevant to LFP) implemented in platforms like COMSOL, PyBaMM, or DUALFOIL. Generate a diverse dataset by simulating cell operation under various:
+        - **Initial Conditions:** Spatially varying initial SEI thickness, LAM, particle size distributions.
+        - **Operating Conditions:** Different C-rates (charge/discharge), temperature profiles (including spatial gradients), Depth-of-Discharge (DoD) ranges, and complex drive cycles.
+        - **Simulation Outputs:** Collect spatiotemporal data for key variables like lithium concentration in solid/electrolyte, electrode potentials, current density distribution, SEI thickness, LAM fraction, temperature distribution, and cell terminal voltage/capacity.
+    2. **Neural Operator Architecture (e.g., Physics-Informed FNO):**
+        - **Input:** The operator network takes functions/fields as input. This includes the initial state fields (e.g., SEI(x,0), LAM(x,0)) and the time-varying boundary/operating conditions (e.g., I(t), T(x,t)).
+        - **Network Structure:** Employ an FNO architecture which efficiently learns mappings between function spaces using Fourier transforms to handle global correlations, suitable for PDE solutions. Or use a DeepONet with branch/trunk nets.
+        - **Output:** The network predicts the spatiotemporal fields of interest (e.g., SEI(x,t), LAM(x,t), Li_concentration(x,t), Voltage(t)) over the desired time horizon.
+    3. **Physics-Informed Loss Function:** Incorporate physical constraints directly into the loss function. This includes:
+        - **Data Loss:** Standard MSE loss between the PINO predictions and the simulation data (or experimental data when available) for key variables.
+        - **PDE Residual Loss:** Penalize the network if its output fields violate the governing electrochemical and degradation PDEs (e.g., charge conservation, species diffusion, SEI growth rate equations). The residuals are evaluated at collocation points sampled across the spatiotemporal domain.
+        - **Boundary/Initial Condition Loss:** Ensure the predictions satisfy the specified initial state and boundary conditions.
+    4. **Training:** Train the PINO end-to-end using the combined loss function on the generated simulation dataset. Use techniques like curriculum learning or adaptive point sampling if needed for stability and efficiency.
+
+    **Intuition & Novelty:** This approach moves beyond standard PINNs (which learn a solution for *fixed* parameters/BCs) or purely data-driven sequence models. By learning the *operator*, the PINO can rapidly predict degradation dynamics for *new, unseen* initial conditions and operating profiles without retraining, effectively acting as a surrogate for the computationally expensive physics simulator. The integration of spatial information and physics constraints ensures more accurate and physically plausible predictions of localized degradation phenomena (e.g., lithium plating hotspots, non-uniform SEI growth), which are critical for understanding failure modes but often missed by simpler models.
+
+    ## **Experiment Plan**
+
+    {'Datasets': ['**Primary:** High-fidelity simulation data generated using PyBaMM or COMSOL implementing a P2D model with LFP parameters and relevant degradation mechanisms (SEI growth, LAM). The dataset should cover a wide range of initial heterogeneities and operational profiles (varying C-rates: 0.1C to 5C; temperatures: 0°C to 50°C, including gradients; cycling protocols: constant current, drive cycles). Spatiotemporal fields (e.g., concentration, potential, SEI thickness) sampled at multiple points within the electrodes and electrolyte domains will form the core data.', '**Validation (Optional but Recommended):** Publicly available experimental LFP cycling datasets (e.g., CALCE, NASA, Sandia, Oxford Battery Degradation Dataset). While these typically lack spatial resolution, cell-level voltage and capacity data can be used to validate the integrated outputs of the PINO predictions under corresponding operational conditions. Data with spatially resolved measurements (e.g., via specialized experimental setups) would be ideal if available.'], 'Baselines': ['**1. Physics Simulation:** Direct results from the high-fidelity simulator (PyBaMM/COMSOL) used for data generation (serves as ground truth for simulation-based tests and performance upper bound).', '**2. Standard PINN:** A Physics-Informed Neural Network trained to solve the governing PDEs for a *specific* set of initial/boundary conditions.', '**3. Data-Driven Sequence Models:** Recurrent Neural Networks (LSTM/GRU) or Transformers trained on time-series data (cell voltage, capacity) derived from the simulations/experiments.', '**4. Reduced-Order Models (ROMs):** Simplified physics models like the Single Particle Model (SPM) with empirical degradation terms.', '**5. Standard Neural Operator (No Physics Loss):** An FNO or DeepONet trained only on the input-output data pairs without the PDE residual loss term.'], 'Metrics': ['**1. Spatiotemporal Field Prediction Accuracy:** Mean Squared Error (MSE) or Relative L2 Norm Error between the PINO-predicted fields (concentration, SEI thickness, LAM, etc.) and the ground truth simulation data across space and time.', '**2. Cell-Level Prediction Accuracy:** RMSE/MAE for terminal voltage prediction during discharge/charge curves and capacity fade prediction over multiple cycles.', '**3. Computational Speed-up:** Ratio of prediction time using the trained PINO vs. the time required for a full physics-based simulation for the same scenario.', '**4. Zero-Shot Prediction Performance:** Evaluate accuracy (Metrics 1 & 2) on new initial conditions and operational profiles not seen during training.', '**5. Physical Consistency:** Evaluate the magnitude of the PDE residuals produced by the PINO predictions (should be minimized by the physics loss).'], 'Ablation Studies': ['**1. Impact of Physics Loss:** Compare the performance of the full PINO against the Standard Neural Operator baseline (trained without PDE loss) to quantify the benefit of incorporating physical constraints.', '**2. Impact of Operator Architecture:**Compare performance using FNO vs. DeepONet (or other relevant operator learning architectures).', '**3. Impact of Data Density:** Train with varying amounts of simulation data (number of simulations, number of spatiotemporal sample points) to assess data requirements.', '**4. Contribution of Different Physics Terms:** Systematically remove or down-weight specific PDE terms (e.g., degradation kinetics, diffusion) from the loss function to understand their individual contribution to accuracy and stability.', '**5. Sensitivity to Input Function Representation:** Evaluate different methods for encoding the input functions/fields (e.g., discretization resolution, basis function representation).']}
+  ontology_mapping: |
+    # **OntoMap-Zero: Zero-Shot Database-to-Ontology Mapping via Chain-of-Thought and Ontology-Augmented Reasoning**
+
+    ## **Proposed Method**
+
+    OntoMap-Zero proposes a zero-shot approach leveraging Large Language Models (LLMs) for database-to-ontology mapping, integrating Chain-of-Thought (CoT) prompting and dynamic retrieval from the target ontology to enhance reasoning and context-awareness.
+
+    **Core Idea:** Frame the mapping task as a structured reasoning problem solvable by an LLM. Enhance the LLM's ability to understand the specific semantics and constraints of the target ontology by dynamically retrieving relevant ontological definitions and axioms during the mapping process. Use CoT to guide the LLM through a step-by-step process for both simple (1:1) and complex (requiring transformations) mappings.
+
+    **Methodology:**
+
+    1. **Input Representation:**
+        - **Database Schema:** Parse the database schema (table names, column names, data types, primary/foreign keys) into a structured textual format. Include sample data values for columns if available to provide semantic context.
+        - **Ontology:** Parse the target ontology (e.g., OWL, RDFS) into a textual representation, listing classes, object properties, data properties, domains, ranges, axioms (subClassOf, disjointWith, etc.), and annotations (rdfs:label, rdfs:comment).
+    2. **Mapping Generation via Ontology-Augmented CoT:**
+        - **Iterative Element Mapping:** Process each database table and column iteratively.
+        - **CoT Prompting:** For each element (e.g., column `C` in table `T`), formulate a prompt instructing the LLM to find the best corresponding ontology element (class for table `T`, property for column `C`). The prompt explicitly requests a step-by-step reasoning process (CoT):
+            - "*Map the database column `db_schema.T.C` (Type: `DataType`, Sample Values: `[v1, v2...]`) to the most appropriate property in the ontology `ontology_uri`.*
+            - *Step 1: Analyze the semantics of the column `C` based on its name, data type (`DataType`), table context (`T`), and sample values. Infer the real-world concept it represents.*
+            - *Step 2: Identify candidate properties in the ontology whose names, descriptions, or expected values (based on `rdfs:range`) align with the inferred concept from Step 1.* **[Retrieval Trigger]**
+            - *Step 3: Retrieve detailed definitions, domain/range constraints, and related axioms for the top-k candidate properties identified in Step 2 from the provided ontology context.* **[Ontology Augmentation]**
+            - *Step 4: Evaluate the candidates based on semantic similarity, type compatibility (column type vs. property range), structural fit (column's table context vs. property domain), and consistency with retrieved ontology axioms.*
+            - *Step 5: Select the best matching property and provide a confidence score and justification based on the evaluation in Step 4. If no suitable direct mapping exists, indicate why and suggest if a complex mapping might be needed.*"
+        - **Ontology-Augmented Retrieval:** Implement a retrieval mechanism triggered during the CoT process (e.g., at Step 2/3). When the LLM needs to explore candidate ontology elements, use the inferred semantics or candidate names to query a vector index (or simple text search) of the parsed ontology representation. Retrieve relevant snippets (definitions, axioms related to candidates) and dynamically insert them into the LLM's context/prompt for the subsequent reasoning steps (Step 4).
+    3. **Complex Mapping Handling:**
+        - **Identification:** If the CoT process for a column indicates no direct mapping or suggests a need for transformation (e.g., splitting a column, combining columns, joining tables, value transformation), trigger a complex mapping generation phase.
+        - **CoT for Transformation Logic:** Use a separate, specialized CoT prompt. Input the relevant DB schema parts, the target ontology concepts/properties identified, and the *reason* why a simple mapping failed. The prompt asks the LLM to:
+            - *Step 1: Re-analyze the relationship between the source DB elements (multiple columns, tables) and the target ontology concept(s)/property(ies).*
+            - *Step 2: Determine the necessary transformation steps (e.g., join tables `T1` and `T2` on `key`, concatenate columns `C1` and `C2`, apply a function `f` to column `C3`).*
+            - *Step 3: Generate the transformation logic in a specified format, preferably SQL query fragments suitable for constructing mapping rules (e.g., R2RML's `rr:sqlQuery`, SPARQL-Generate's `BIND`/`CONSTRUCT`).*
+            - *Step 4: Justify the generated transformation logic.*
+    4. **Output Consolidation:** Aggregate the generated simple and complex mappings into a standard mapping document (e.g., R2RML, SHACL-based mappings, or a structured JSON format). Include justifications and confidence scores provided by the LLM.",
+
+    ## **Experiment Plan**
+
+    datasets": [
+
+    "**Standard Benchmarks:** Use established datasets with ground truth mappings, preferably containing both simple and complex cases.",
+
+    "*  **DOREMUS:** Music domain, mapping relational DB to CIDOC-CRM based ontology.",
+
+    "*  **BSBM (Berlin SPARQL Benchmark):** E-commerce domain. While primarily a query benchmark, its schema and conceptual model can be adapted for mapping tasks if ground truth is available or can be created.",
+
+    "*  **SWC (Semantic Web Challenge) Datasets (e.g., Billion Triples Challenge Data):** If schemas and corresponding ontologies exist, subsets can be used.",
+
+    "*  **Domain-Specific Datasets:** Datasets from BioPortal (mapping databases to biomedical ontologies) or specific research papers on DB-to-Ontology mapping.",
+
+    "*  **Synthetic Datasets:** Potentially create synthetic datasets with controlled complexity (varying schema complexity, ontology size, mapping types) to test specific aspects."
+
+    ],
+
+    "baselines": [
+
+    "**Traditional Methods:**",
+
+    "*  **Karma:** A widely used semi-automatic, interactive mapping tool (use its automated suggestions as a baseline).",
+
+    "*  **Rule-Based Systems:** Implement a baseline using common heuristic rules (e.g., name similarity, type matching).",
+
+    "*  **Schema Matching Tools:** Tools focused on schema matching based on similarity metrics (e.g., COMA, Similarity Flooding), adapted for ontology mapping.",
+
+    "**ML/LLM-Based Methods:**",
+
+    "*  **Embedding Similarity:** Use pre-trained sentence embeddings (e.g., Sentence-BERT) to compute similarity between column/table descriptions and ontology element descriptions.",
+
+    "*  **Supervised Mapping Methods:** If labelled data is available for a dataset, compare against supervised ML approaches.",
+
+    "*  **Vanilla LLM Prompting:** Use the same LLM backbone (e.g., GPT-4, Llama-3) with direct, non-CoT prompts for mapping without retrieval.",
+
+    "*  **LLM + CoT (No Retrieval):** Isolate the effect of CoT by running the proposed method without the ontology retrieval step."
+
+    ],
+
+    "metrics": [
+
+    "**Mapping Accuracy:**",
+
+    "*  **Precision, Recall, F1-Score:** Calculated based on the set of generated mappings (`(DB element, Ontology element, [Transformation Logic])`) compared to the ground truth mappings.",
+
+    "* Distinguish between simple (1:1) and complex mapping accuracy.",
+
+    "**Transformation Correctness:**",
+
+    "*  **SQL/Logic Validity:** Percentage of generated SQL fragments or transformation logic expressions that are syntactically valid.",
+
+    "*  **Semantic Correctness:** Manual evaluation or task-based evaluation (see below) to assess if the generated logic correctly implements the intended transformation.",
+
+    "**Task-Based Evaluation:**",
+
+    "*  **Query Answering Accuracy:** Use the generated mappings to materialize RDF data (or configure an OBDA system). Evaluate the accuracy of answering a predefined set of SPARQL queries (whose answers over the ground truth materialization are known)."
+
+    ],
+
+    "ablation_studies": [
+
+    "*  **Impact of CoT:** Compare OntoMap-Zero against the 'Vanilla LLM Prompting' baseline and 'LLM + CoT (No Retrieval)' to quantify the benefits of structured reasoning.",
+
+    "*  **Impact of Ontology-Augmented Retrieval:** Compare OntoMap-Zero against 'LLM + CoT (No Retrieval)' to isolate the contribution of dynamically retrieving ontology context.",
+
+    "*  **Impact of Complex Mapping Component:** Evaluate the system's performance on datasets with and without complex mappings, comparing the full OntoMap-Zero method against a version that only generates simple mappings.",
+
+    "*  **Effect of LLM Backbone:** Run experiments using different LLMs (e.g., GPT-4, GPT-3.5-Turbo, Llama-3-70B, Mixtral) to assess sensitivity to model choice.",
+
+    "*  **Effect of Retrieval Strategy:** If using vector retrieval, experiment with different embedding models, indexing strategies, and top-k values for retrieval.",
+
+    "*  **Impact of Input Representation:** Analyze sensitivity to the quality and detail of the schema/ontology textual representations (e.g., including/excluding sample data, axioms)."
+
+    ]
+
+    }
+  nl2sql: |
+    # **DyKnow-SQL: Dynamic Knowledge Graph Integration with Adaptive Attention for Context-Aware Text-to-SQL Generation**
+
+    ## **Proposed Method**
+
+    DyKnow-SQL proposes a novel framework for Text-to-SQL generation that dynamically integrates multi-faceted knowledge (schema structure, domain constraints, query context) through an automatically constructed knowledge graph (KG) and an adaptive attention mechanism within an encoder-decoder architecture.
+
+    **Core Idea:** Existing methods often struggle to flexibly incorporate diverse knowledge sources relevant to a specific query and schema. DyKnow-SQL addresses this by:
+
+    1. **Automated, Multi-Relational KG Construction:** For each input (NL query, DB schema), a localized KG is built on-the-fly. This KG includes:
+        - *Schema Nodes:* Tables and Columns.
+        - *Schema Edges:* Primary Key-Foreign Key (PK-FK) relationships, Table-Column ownership.
+        - *Attribute Nodes/Edges:* Data types, simple statistics (e.g., min/max for numerical, common values for categorical derived from DB sampling or metadata if available) linked to columns.
+        - *Query Nodes:* Key entities/concepts extracted from the NL query (e.g., using simple NER or keyword extraction).
+        - *Linking Edges:* Potential alignments between query nodes and schema nodes (columns/tables), weighted by lexical similarity (e.g., TF-IDF, embedding similarity). These are potential links, the model learns to use them.
+    2. **Knowledge Graph Encoding:** A Relational Graph Convolutional Network (R-GCN) or similar GNN is used to encode the constructed KG, learning representations for schema elements and query concepts that capture relational information.
+    3. **Encoder-Decoder Architecture:** A pre-trained sequence-to-sequence model (e.g., T5, BART) serves as the backbone.
+        - *Encoder Input:* Concatenation of the NL query and a linearized representation of the database schema.
+        - *Decoder:* Autoregressively generates the SQL query token by token.
+    4. **Adaptive Knowledge Fusion Attention:** This is the key novelty. At each decoding step, the decoder attends not only to the encoder's output (contextualized query/schema) but also to the GNN's node representations. Crucially, an *adaptive gating mechanism* or a specialized multi-head attention layer is introduced. This mechanism takes the current decoder state, the encoder output, and the GNN outputs as input, and learns to dynamically calculate attention weights over:
+        - The general context from the NL encoder.
+        - Specific schema nodes identified as relevant by the GNN and linking edges.
+        - Structural relationships captured by the GNN.
+        - This allows the model to prioritize different knowledge aspects (e.g., focus on PK-FK links for a JOIN condition, focus on value constraints for a WHERE clause) based on the query and the current generation state.
+    5. **End-to-End Training:** The entire architecture (Encoder, GNN, Decoder, Adaptive Attention) is trained end-to-end using standard cross-entropy loss on the target SQL queries.
+
+    **Intuition:** By explicitly modeling relationships in a KG and using a GNN, the model gains a deeper understanding of schema structure than purely sequence-based models. The adaptive attention mechanism allows this structural and contextual knowledge to be dynamically and relevantly integrated during SQL generation, leading to more accurate handling of complex joins, conditions, and value constraints, specifically tailored to the input query and schema.
+
+    ## **Experiment Plan**
+
+    ## **Empirical Validation Plan for DyKnow-SQL**
+
+    **1. Datasets:**
+
+    - **Primary:**
+        - `Spider`: Large-scale, cross-domain Text-to-SQL benchmark. Used for main training and evaluation.
+        - `Spider-Realistic`: Subset of Spider with more realistic NL questions.
+        - `Spider-DK`: Spider augmented with domain knowledge (e.g., column semantics). Used to evaluate the model's ability to leverage explicit domain knowledge if encoded in the KG.
+        - `Spider-Syn`: Spider subset with synonymous NL questions. Used to test robustness to paraphrasing.
+    - **Secondary (Domain-Specific):**
+        - `KaggleDBQA` or similar datasets containing databases with richer content/metadata to test domain knowledge integration capabilities more deeply.
+        - Potentially `WikiSQL` for evaluating performance on simpler, single-table queries, although less relevant for complex knowledge integration.
+
+    **2. Baselines:**
+
+    - **SOTA Text-to-SQL Models:**
+        - `RESDSQL`: Strong sequence-to-sequence model with relation-aware self-attention.
+        - `GraphIX-SP`: Graph-aware encoder-decoder model focusing on schema graph structure.
+        - `T5/BART + PICARD`: Pre-trained models fine-tuned with constrained decoding (PICARD).
+        - `DIN-SQL`: Decomposition-in-context learning approach.
+        - `LGESQL`: Line Graph Enhanced Text-to-SQL model.
+    - **Ablated Versions of DyKnow-SQL (See Section 4).**
+
+    **3. Metrics:**
+
+    - **Primary:**
+        - `Exact Set Match Accuracy (Exec Acc)`: Measures the percentage of predicted queries whose execution results match the ground truth results on the database (requires execution environment). This is the most important metric.
+        - `Test Suite Execution Accuracy (TS Exec Acc)`: Measures execution accuracy against multiple database states, providing a more robust evaluation (as used in Spider leaderboard).
+    - **Secondary:**
+        - `Exact Match Accuracy (EM)`: Measures the percentage of predicted queries that exactly match the gold query string. Less reliable due to SQL query equivalence variations.
+        - `Validation Accuracy`: Performance on the development set during training.
+        - `Inference Latency/Efficiency`: Measure average time to generate SQL for a given query/schema pair.
+
+    **4. Ablation Studies:**
+
+    To isolate the contribution of key components of DyKnow-SQL:
+
+    - **`DyKnow-SQL (No KG)`:** Remove the KG construction and GNN encoding entirely. Feed only the NL query and linearized schema to the base encoder-decoder model. This validates the benefit of the explicit KG representation.
+    - **`DyKnow-SQL (No Adaptive Attention)`:** Replace the proposed adaptive knowledge fusion attention with a simpler mechanism, such as simple concatenation of GNN outputs and encoder outputs before the final prediction layer, or standard cross-attention. This validates the effectiveness of the dynamic weighting.
+    - **`DyKnow-SQL (Schema KG Only)`:** Construct the KG using only schema structure (tables, columns, PK-FK links) without query-specific nodes/links or attribute information. This assesses the contribution of integrating query context and basic domain knowledge (attributes) into the graph.
+    - **`DyKnow-SQL (w/o Pre-training)`:** Train the model from scratch without leveraging pre-trained T5/BART weights to understand the impact of pre-training.
+    - **Attention Weight Analysis:** Qualitatively analyze the learned attention weights from the adaptive fusion mechanism on representative examples. Verify if the model correctly focuses on relevant schema parts (e.g., join columns, columns in WHERE clauses) based on the query.
+  harmful_memes: |
+    # **Simulating the Cultural Evolution and Emergent Harm of Memes in Online Social Networks: An Agent-Based Modeling Approach**
+
+    ## **Proposed Method**
+
+    ### **Overview**
+
+    This research proposes a fundamentally different approach by employing Agent-Based Modeling (ABM) combined with methods inspired by cultural evolution and phylomemetics to simulate the lifecycle of memes within diverse communication contexts. Instead of predicting harm for individual meme instances, this method focuses on understanding the *emergent* dynamics of meme interpretation, propagation, modification, and the potential for harmful interpretations to arise and spread within simulated online communities. The goal is to model the socio-cognitive processes underlying meme communication and its potential negative consequences at a population level.
+
+    ### **Core Components**
+
+    1. **Phylomemetic Analysis Engine:**
+        - **Purpose:** To understand how memes mutate and evolve over time, creating lineages.
+        - **Method:** Collect longitudinal data of meme variants across different online spaces. Use a combination of perceptual hashing (e.g., pHash) for image similarity, Optical Character Recognition (OCR) for embedded text extraction, and natural language processing (NLP) techniques (e.g., sentence embeddings, topic modeling) for textual similarity and semantic shift analysis. Techniques analogous to phylogenetic reconstruction in biology (e.g., neighbor-joining, maximum parsimony applied to feature distance matrices) will be adapted to build 'meme trees' or networks, tracing their modification history and identifying dominant templates and mutation patterns (e.g., text changes, image template reuse, image edits).
+        - **Output:** Reconstructed evolutionary pathways of memes, identification of mutation types and rates, and characterization of meme lineages.
+    2. **Agent-Based Model (ABM) of Meme Communication:**
+        - **Purpose:** To simulate how individual agents (representing users) interact with memes within a social network, leading to population-level patterns of interpretation and harm.
+        - **Agents:** Each agent possesses attributes:
+            - `Internal State`: Beliefs, opinions, susceptibility to certain themes (e.g., political leaning, pre-existing biases).
+            - `Social Connections`: Links to other agents representing a social network structure.
+            - `Community Affiliation`: Membership in sub-communities with potentially distinct norms.
+            - `Interpretation Module`: A probabilistic function determining how an agent interprets a meme based on its content (informed by phylomemetic features), the agent's internal state, and perceived norms of the immediate context (e.g., local community norms within the simulation).
+            - `Harm Perception Module`: A function evaluating the interpreted meaning against the agent's values/biases to determine a level of perceived 'harmfulness' (to self or others).
+            - `Behavioral Rules`: Probabilistic rules for interacting with a meme: ignoring, sharing (with or without modification), commenting, reacting. Sharing decisions depend on interpretation, perceived harm, social signaling goals, and network feedback.
+        - **Environment:** A simulated social network platform allowing meme posting, visibility based on network structure, and interaction feedback (e.g., simulated likes/shares influencing future visibility).
+        - **Meme Representation:** Memes within the simulation are represented by feature vectors derived from the phylomemetic analysis, capturing both template identity and specific variant features.
+    3. **Integration and Simulation Loop:**
+        - **Initialization:** Populate the simulation with agents having diverse attributes and network connections (potentially derived from empirical data or theoretical models like scale-free networks). Define initial community norms.
+        - **Seeding:** Introduce memes (potentially sampled from real data or representing specific types) into the network.
+        - **Timestep Simulation:** In discrete time steps:
+            - Agents are exposed to memes shared by their connections.
+            - Agents interpret memes via their Interpretation Module.
+            - Agents perceive harm via their Harm Perception Module.
+            - Agents decide whether/how to interact (share, modify) based on behavioral rules.
+            - Modification actions generate new meme variants, potentially using mutation operators informed by the Phylomemetic Analysis Engine (e.g., common text substitution patterns).
+            - Network structure and agent states may evolve based on interactions.
+        - **Output:** Time-series data on meme prevalence, distribution of interpretations, average perceived harm levels across communities, emergence of dominant (and potentially harmful) lineages, and agent state distributions.
+
+    ### **Underlying Intuition**
+
+    This approach shifts the focus from static classification to dynamic simulation. It treats meme harm not as a fixed property of a meme-context pair, but as an emergent property of the interaction between meme evolution, individual cognitive/interpretive processes, social network structure, and community norms. By simulating these interacting factors, we can explore *how* harmful interpretations arise, spread, and potentially become entrenched or neutralized within different online ecosystems, providing insights beyond correlational findings.
+
+    ## **Experiment Plan**
+
+    ### **1. Data Collection & Phylomemetic Analysis**
+
+    - **Data Sources:** Collect large-scale, longitudinal datasets of meme images and associated text/metadata (timestamps, poster ID (anonymized), community/thread context, engagement metrics like upvotes/comments) from diverse platforms (e.g., specific subreddits known for meme generation like r/dankmemes, politically diverse subreddits, image boards like 4chan/pol/, potentially Twitter streams related to specific events).
+    - **Meme Identification & Feature Extraction:** Use image clustering (via perceptual hashing) and OCR/NLP to identify meme templates and variants. Extract features representing visual elements, textual content, and potentially semantic embeddings.
+    - **Phylogenetic Reconstruction:** Apply phylogenetic algorithms (e.g., adapting neighbor-joining or Bayesian methods) to feature distances between meme variants within identified families. Visualize meme lineages and analyze branching patterns, mutation rates (e.g., rate of text change vs. image manipulation), and lineage longevity.
+    - **Harm Association (Exploratory):** Sample memes from different branches/lineages and perform qualitative or limited quantitative annotation (linking to known hate symbols, toxic language databases, or small-scale human rating) to explore potential correlations between evolutionary patterns and harmful characteristics.
+
+    ### **2. ABM Parameterization and Calibration**
+
+    - **Network Structure:** Construct simulated networks based on empirical properties of target platforms (e.g., degree distributions, clustering coefficients) or use canonical network models (e.g., Barabási–Albert for scale-free, Watts–Strogatz for small-world).
+    - **Agent Attributes:** Define distributions for agent attributes (e.g., simulated political leaning based on subreddit data, initial interpretation biases). Use literature from social psychology and communication studies to inform plausible ranges.
+    - **Interpretation/Behavioral Rules:** Define functional forms for interpretation, harm perception, and sharing. Initially use simple probabilistic rules. Crucially, calibrate key parameters (e.g., base sharing probability, influence of perceived harm on sharing, modification rate) by running the simulation and adjusting parameters until emergent macro-level statistics (e.g., distribution of meme popularities, average meme lifespan in the simulation) approximate those observed in the empirical data collected in Step 1.
+
+    ### **3. Simulation Experiments**
+
+    - **Baseline Simulations:** Run the calibrated model to observe emergent dynamics under 'normal' conditions.
+    - **Hypothesis Testing via Parameter Variation:**Systematically vary key parameters or initial conditions to test specific hypotheses:
+        - **Impact of Network Structure:** Compare meme spread and harm emergence in simulations with different network topologies (e.g., highly clustered vs. random vs. scale-free).
+        - **Impact of Community Norms:** Simulate communities with different initial distributions of agent 'values' or interpretation biases (e.g., a 'tolerant' vs. 'intolerant' community). Observe how the same meme seeding leads to different outcomes.
+        - **Impact of Meme Characteristics:** Seed simulations with memes whose lineages were identified (in Step 1) as potentially associated with harm vs. benign lineages. Compare their propagation dynamics.
+        - **Emergence of Harm:** Investigate conditions under which initially benign memes can evolve (through simulated modifications) into harmful variants and whether these variants achieve significant spread.
+        - **Intervention Strategies:** Simulate interventions, such as:
+            - 'Content Moderation': Removing memes/agents exceeding a certain harm threshold.
+            - 'Counter-Messaging': Seeding the network with 'counter-memes'.
+            - 'Norm Shifts': Gradually changing agent parameters related to interpretation or harm perception.Evaluate the effectiveness of these strategies in reducing the prevalence of simulated harm.
+
+    ### **4. Analysis and Metrics**
+
+    - **Phylomemetic Metrics:** Tree balance, diversification rates, rates of specific mutation types (textual vs. visual), correlation between lineage depth/size and harm indicators.
+    - **ABM Output Metrics:**
+        - `Prevalence Curves`: Number of agents exposed to/sharing specific memes or meme lineages over time.
+        - `Harm Distribution`: Distribution of perceived harm scores across agents and communities over time.
+        - `Interpretation Diversity/Polarization`: Measures of agreement/disagreement in meme interpretations among agents (e.g., entropy of interpretation states).
+        - `Fixation Time`: Time taken for certain interpretations or meme lineages to become dominant.
+        - `Network Segregation`: Extent to which agents with different interpretation patterns form separate clusters.
+        - `Intervention Effectiveness`: Reduction in harm metrics compared to baseline after applying simulated interventions.
+
+    ### **5. Validation**
+
+    - **Qualitative Validation:** Compare simulated evolutionary pathways and emergent social patterns (e.g., rapid spread of controversial memes, echo chamber effects in interpretation) with qualitative observations from real online communities.
+    - **Quantitative Pattern Matching:** Compare statistical patterns from the simulation (e.g., distributions of meme popularity, lifespan, modification rates) with those measured from the empirical data. While exact prediction is not the goal, the model should replicate key stylized facts of online meme dynamics.
+    - **Sensitivity Analysis:** Assess how sensitive the simulation outcomes are to variations in uncertain parameters to understand the robustness of the findings.
