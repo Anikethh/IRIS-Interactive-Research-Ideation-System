@@ -1,7 +1,9 @@
 # 🌟 Interactive Research Ideation System
 
-Official repository for the paper [IRIS: Interactive Research Ideation System](https://arxiv.org/abs/2504.16728) 
 🎉 **Accepted to ACL 2025 System Demonstration Track!**
+
+Official repository for the paper [IRIS: Interactive Research Ideation System](https://arxiv.org/abs/2504.16728) 
+
 
 ![IRIS Diagram](assets/Diagram.png)
 
