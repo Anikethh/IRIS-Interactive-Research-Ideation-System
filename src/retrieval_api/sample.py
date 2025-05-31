@@ -8,8 +8,8 @@ from scholarqa.rag.retriever_base import FullTextRetriever
 from scholarqa.rag.reranker.modal_engine import HuggingFaceReranker
 
 # API key should be set in environment variable
-if not os.getenv('S2_API_KEY'):
-    raise ValueError("S2_API_KEY environment variable must be set")
+if not os.getenv('SEMANTIC_SCHOLAR_API_KEY'):
+    raise ValueError("SEMANTIC_SCHOLAR_API_KEY environment variable must be set")
 
 retriever = FullTextRetriever(n_retrieval=10, n_keyword_srch=10)
 reranker = HuggingFaceReranker(model_name="cross-encoder/ms-marco-MiniLM-L-6-v2", batch_size=256)

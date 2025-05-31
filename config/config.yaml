@@ -41,9 +41,9 @@ default_models:
   reranker: "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
 ideation_agent:
-  # model: "gemini/gemini-2.0-flash-lite"
+  model: "gemini/gemini-2.0-flash-lite"
   # model: "gemini/gemini-2.0-flash"
-  model: "gemini/gemini-2.5-pro-exp-03-25"
+  # model: "gemini/gemini-2.5-pro-exp-03-25"
   max_tokens: 512
   temperature: 0.7
   top_p: 0.9

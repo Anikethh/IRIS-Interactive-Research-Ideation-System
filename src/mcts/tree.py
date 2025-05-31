@@ -59,11 +59,12 @@ class MCTS:
         self.s2_api_url = "https://api.semanticscholar.org/graph/v1"
         s2_api_key = os.getenv("SEMANTIC_SCHOLAR_API_KEY")
         if not s2_api_key:
-            raise ValueError("SEMANTIC_SCHOLAR_API_KEY environment variable must be set")
-        
-        self.s2_headers = {
-            "x-api-key": s2_api_key
-        }
+            logger.warning("SEMANTIC_SCHOLAR_API_KEY environment variable is not set. Semantic Scholar API features will be disabled.")
+            self.s2_headers = {}
+        else:
+            self.s2_headers = {
+                "x-api-key": s2_api_key
+            }
 
     def load_prompts(self) -> None:
         """Load prompts from configuration."""
