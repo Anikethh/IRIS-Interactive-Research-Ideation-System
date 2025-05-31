@@ -2,7 +2,7 @@
 
 🎉 **Accepted to ACL 2025 System Demonstration Track!**
 
-Official repository for the paper [IRIS: Interactive Research Ideation System](https://arxiv.org/abs/2504.16728) 
+Official repository for the paper <a href="https://arxiv.org/abs/2504.16728" target="_blank">IRIS: Interactive Research Ideation System</a>
 
 
 ![IRIS Diagram](assets/Diagram.png)
