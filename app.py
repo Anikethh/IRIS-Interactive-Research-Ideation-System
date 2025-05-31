@@ -100,8 +100,12 @@ with open("config/config.yaml", "r") as f:
     config = yaml.safe_load(f)
 
 # Set Semantic Scholar API key
-s2_api_key = os.environ.get("S2_API_KEY")
-os.environ['S2_API_KEY'] = s2_api_key
+s2_api_key = os.environ.get("SEMANTIC_SCHOLAR_API_KEY")
+if not s2_api_key:
+    logger.warning("SEMANTIC_SCHOLAR_API_KEY environment variable is not set. Semantic Scholar API features will be disabled.")
+    os.environ['SEMANTIC_SCHOLAR_API_KEY'] = ''
+else:
+    os.environ['SEMANTIC_SCHOLAR_API_KEY'] = s2_api_key
 
 # Set Google API key securely
 gemini_key = get_api_key("googleaistudio", config)
@@ -157,7 +161,7 @@ def set_api_key():
             "claude": "ANTHROPIC_API_KEY",
             "deepseek": "DEEPSEEK_API_KEY",
             "gemini": "GEMINI_API_KEY",
-            "semantic_scholar": "S2_API_KEY"
+            "semantic_scholar": "SEMANTIC_SCHOLAR_API_KEY"
         }
         
         # Save the key to environment variable for immediate use

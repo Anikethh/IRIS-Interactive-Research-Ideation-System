@@ -26,7 +26,7 @@ This project uses ```uv``` for package management, but you can use any virtual e
 3.  **Set Environment Variables:**
     Setup your API keys:
     ```bash
-    export S2_API_KEY="your_semantic_scholar_api_key" 
+    export SEMANTIC_SCHOLAR_API_KEY="your_semantic_scholar_api_key" 
     export GEMINI_API_KEY="your_google_gemini_api_key" 
     ```
 
