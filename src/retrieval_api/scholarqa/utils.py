@@ -14,7 +14,7 @@ from scholarqa.llms.litellm_helper import setup_llm_cache
 
 logger = logging.getLogger(__name__)
 
-S2_APIKEY = os.getenv("S2_API_KEY", "AWhwVf4P6szKDRN30RNE86efdIX2CeI7I0Vvj7La")
+S2_APIKEY = os.getenv("SEMANTIC_SCHOLAR_API_KEY")
 S2_HEADERS = {"x-api-key": S2_APIKEY}
 S2_API_BASE_URL = "https://api.semanticscholar.org/graph/v1/"
 CompletionResult = namedtuple("CompletionCost",
