@@ -1,0 +1,28 @@
+services:
+  iris-web:
+    build: .
+    ports:
+      - "8080:5000"  # Changed external port to 8080 to avoid conflict
+    environment:
+      - FLASK_ENV=production
+      - DEPLOY=true
+      # Azure OpenAI Configuration
+      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
+      - AZURE_OPENAI_API_VERSION=${AZURE_OPENAI_API_VERSION:-2024-06-01}
+      # Other API Keys
+      - SEMANTIC_SCHOLAR_API_KEY=${SEMANTIC_SCHOLAR_API_KEY}
+      - HUGGINGFACE_API_KEY=${HUGGINGFACE_API_KEY}
+      # Flask Configuration
+      - FLASK_SECRET_KEY=${FLASK_SECRET_KEY:-your-secret-key-here}
+    volumes:
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+      - ./secure_keys:/app/secure_keys
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
