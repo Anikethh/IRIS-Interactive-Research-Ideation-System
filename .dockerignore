@@ -93,3 +93,7 @@ coverage.xml
 
 # Jupyter Notebook
 .ipynb_checkpoints
+
+# Docker image files (too large for GitHub)
+*.tar
+iris-web-*.tar
