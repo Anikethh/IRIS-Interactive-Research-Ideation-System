@@ -1,43 +1,45 @@
 #!/bin/bash
 
-# IRIS Docker Build and Push Script
-# This script builds the Docker image and pushes it to Azure Container Registry
+# IRIS Docker Build and Export Script
+# This script builds the Docker image and exports it as a tar file for deployment
 
 set -e
 
 # Configuration
 IMAGE_NAME="iris-web"
 VERSION=${1:-latest}
-REGISTRY_NAME=${AZURE_CONTAINER_REGISTRY:-"your-registry-name"}
-REGISTRY_URL="${REGISTRY_NAME}.azurecr.io"
+TAR_FILE="iris-web-${VERSION}.tar"
 
 echo "🔨 Building IRIS Docker image..."
-echo "Image: ${REGISTRY_URL}/${IMAGE_NAME}:${VERSION}"
+echo "Image: ${IMAGE_NAME}:${VERSION}"
 
 # Build the Docker image
 docker build -t "${IMAGE_NAME}:${VERSION}" .
-docker tag "${IMAGE_NAME}:${VERSION}" "${REGISTRY_URL}/${IMAGE_NAME}:${VERSION}"
 
 echo "✅ Docker image built successfully!"
 
-# Optional: Push to Azure Container Registry
-read -p "Do you want to push to Azure Container Registry? (y/N): " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    echo "🚀 Pushing to Azure Container Registry..."
-    
-    # Login to ACR (requires Azure CLI)
-    az acr login --name "${REGISTRY_NAME}"
-    
-    # Push the image
-    docker push "${REGISTRY_URL}/${IMAGE_NAME}:${VERSION}"
-    
-    echo "✅ Image pushed successfully!"
-    echo "📋 Image URL: ${REGISTRY_URL}/${IMAGE_NAME}:${VERSION}"
+# Export to tar file
+echo "📦 Exporting Docker image to tar file..."
+docker save -o "${TAR_FILE}" "${IMAGE_NAME}:${VERSION}"
+
+echo "✅ Docker image exported to: ${TAR_FILE}"
+echo "📊 File size:"
+
+# Cross-platform file size display
+if command -v ls &> /dev/null; then
+    ls -lh "${TAR_FILE}"
+elif command -v dir &> /dev/null; then
+    dir "${TAR_FILE}"
 else
-    echo "ℹ️  Image built locally. To push later, run:"
-    echo "   az acr login --name ${REGISTRY_NAME}"
-    echo "   docker push ${REGISTRY_URL}/${IMAGE_NAME}:${VERSION}"
+    echo "File created: ${TAR_FILE}"
 fi
 
-echo "🎉 Build complete!"
+echo ""
+echo "🎉 Ready for deployment!"
+echo "📋 Deployment package: ${TAR_FILE}"
+echo "⚠️  Remember to provide environment variables to your infrastructure team"
+echo ""
+echo "Next steps for infrastructure team:"
+echo "1. Load image: docker load -i ${TAR_FILE}"
+echo "2. Tag for registry: docker tag ${IMAGE_NAME}:${VERSION} your-registry/${IMAGE_NAME}:${VERSION}"
+echo "3. Push to registry: docker push your-registry/${IMAGE_NAME}:${VERSION}"
