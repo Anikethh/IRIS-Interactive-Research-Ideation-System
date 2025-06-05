@@ -41,12 +41,23 @@ class ScholarQA:
             logs_config: LogsConfig = None,
             **kwargs
     ):
-        # Check for required environment variables
-        required_keys = {
-            'HUGGINGFACE_API_KEY': 'Hugging Face API key',
-            'GROQ_API_KEY': 'Groq API key',
-            'GEMINI_API_KEY': 'Google AI (Gemini) API key'
-        }
+        # Check for required environment variables based on deployment mode
+        deploy_mode = os.environ.get('DEPLOY', 'false').lower() == 'true'
+        
+        if deploy_mode:
+            # In Azure OpenAI deployment mode, we need different API keys
+            required_keys = {
+                'AZURE_OPENAI_API_KEY': 'Azure OpenAI API key',
+                'AZURE_OPENAI_ENDPOINT': 'Azure OpenAI endpoint',
+                'HUGGINGFACE_API_KEY': 'Hugging Face API key',
+            }
+        else:
+            # In regular mode, we need the standard API keys
+            required_keys = {
+                'HUGGINGFACE_API_KEY': 'Hugging Face API key',
+                'GROQ_API_KEY': 'Groq API key',
+                'GEMINI_API_KEY': 'Google AI (Gemini) API key'
+            }
 
         missing_keys = []
         for env_var, description in required_keys.items():
@@ -54,10 +65,12 @@ class ScholarQA:
                 missing_keys.append(f"{description} ({env_var})")
 
         if missing_keys:
-            raise ValueError(
-                "Missing required API keys. Please set the following environment variables:\n" +
+            mode_info = "Azure OpenAI mode" if deploy_mode else "regular mode"
+            # Convert to warnings instead of errors as requested
+            logger.warning(
+                f"Missing some API keys for {mode_info}. The following environment variables are not set:\n" +
                 "\n".join(f"- {key}" for key in missing_keys) +
-                "\n\nSee .env.example for configuration details."
+                "\n\nSome features may be disabled. See .env.example for configuration details."
             )
 
         if logs_config:
