@@ -90,12 +90,25 @@ class ClusterPlan(BaseModel):
 
 def validate_api_keys():
     """Validate that all required API keys are available."""
-    required_keys = {
-        'OPENAI_API_KEY': 'OpenAI API key',
-        'HUGGINGFACE_API_KEY': 'Hugging Face API key',
-        'SEMANTIC_SCHOLAR_API_KEY': 'Semantic Scholar API key',
-        'GEMINI_API_KEY': 'Google AI (Gemini) API key'
-    }
+    # Check if we're in Azure OpenAI deployment mode
+    deploy_mode = os.environ.get('DEPLOY', 'false').lower() == 'true'
+    
+    if deploy_mode:
+        # In Azure OpenAI mode, we need Azure OpenAI keys instead of regular OpenAI/Gemini
+        required_keys = {
+            'AZURE_OPENAI_API_KEY': 'Azure OpenAI API key',
+            'AZURE_OPENAI_ENDPOINT': 'Azure OpenAI endpoint',
+            'HUGGINGFACE_API_KEY': 'Hugging Face API key',
+            'SEMANTIC_SCHOLAR_API_KEY': 'Semantic Scholar API key'
+        }
+    else:
+        # In regular mode, we need the standard API keys
+        required_keys = {
+            'OPENAI_API_KEY': 'OpenAI API key',
+            'HUGGINGFACE_API_KEY': 'Hugging Face API key',
+            'SEMANTIC_SCHOLAR_API_KEY': 'Semantic Scholar API key',
+            'GEMINI_API_KEY': 'Google AI (Gemini) API key'
+        }
     
     missing_keys = []
     for env_var, description in required_keys.items():
@@ -103,10 +116,14 @@ def validate_api_keys():
             missing_keys.append(f"{description} ({env_var})")
     
     if missing_keys:
-        raise ValueError(
-            "Missing required API keys. Please set the following environment variables:\n" + 
+        mode_info = "Azure OpenAI mode" if deploy_mode else "LiteLLM mode"
+        # Convert to warnings instead of errors as requested
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(
+            f"Missing some API keys for {mode_info}. The following environment variables are not set:\n" + 
             "\n".join(f"- {key}" for key in missing_keys) +
-            "\n\nSee .env.example for configuration details."
+            "\n\nSome features may be disabled. See .env.example for configuration details."
         )
 
 

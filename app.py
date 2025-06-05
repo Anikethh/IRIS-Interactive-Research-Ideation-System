@@ -20,7 +20,8 @@ import click
 
 logger = logging.getLogger(__name__)
 
-sys.path.insert(0, "/Users/aniketh/TCS Research/IRIS/src/retrieval_api")
+# Remove the old external path and use local scholarqa package
+sys.path.insert(0, str(Path(__file__).parent / "src" / "retrieval_api"))
 from scholarqa import ScholarQA
 from scholarqa.rag.retrieval import PaperFinder, PaperFinderWithReranker
 from scholarqa.rag.retriever_base import FullTextRetriever
@@ -107,10 +108,20 @@ if not s2_api_key:
 else:
     os.environ['SEMANTIC_SCHOLAR_API_KEY'] = s2_api_key
 
-# Set Google API key securely
-gemini_key = get_api_key("googleaistudio", config)
-if gemini_key:
-    os.environ['GEMINI_API_KEY'] = gemini_key
+# Set Google API key securely only if not in Azure OpenAI deployment mode
+deploy_mode = os.environ.get('DEPLOY', 'false').lower() == 'true'
+if not deploy_mode:
+    gemini_key = get_api_key("googleaistudio", config)
+    if gemini_key:
+        os.environ['GEMINI_API_KEY'] = gemini_key
+else:
+    # In Azure OpenAI mode, ensure Azure OpenAI keys are available
+    azure_key = os.environ.get("AZURE_OPENAI_API_KEY")
+    azure_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
+    if not azure_key:
+        logger.warning("AZURE_OPENAI_API_KEY not set while in deployment mode")
+    if not azure_endpoint:
+        logger.warning("AZURE_OPENAI_ENDPOINT not set while in deployment mode")
 
 retriever = FullTextRetriever(n_retrieval=10, n_keyword_srch=10)
 # paper_finder = PaperFinder(retriever, context_threshold=0.1)
@@ -326,6 +337,28 @@ def get_encryption_script():
     """Return JavaScript code for client-side encryption"""
     return get_client_encryption_script(), 200, {'Content-Type': 'application/javascript'}
 
+@app.route("/api/llm_client_info")
+def get_llm_client_info():
+    """Get information about which LLM client is being used"""
+    try:
+        from src.agents.llm_utils import get_client_info
+        client_info = get_client_info()
+        
+        # Add environment variable info
+        env_info = {
+            "DEPLOY": os.environ.get('DEPLOY', 'false'),
+            "AZURE_OPENAI_API_KEY_SET": bool(os.environ.get('AZURE_OPENAI_API_KEY')),
+            "AZURE_OPENAI_ENDPOINT_SET": bool(os.environ.get('AZURE_OPENAI_ENDPOINT')),
+            "AZURE_OPENAI_API_VERSION": os.environ.get('AZURE_OPENAI_API_VERSION', '2024-06-01')
+        }
+        
+        return jsonify({
+            "client_info": client_info,
+            "environment": env_info
+        })
+        
+    except Exception as e:
+        return jsonify({"error": f"Failed to get client info: {str(e)}"}), 500
 
 @app.route("/")
 def index():

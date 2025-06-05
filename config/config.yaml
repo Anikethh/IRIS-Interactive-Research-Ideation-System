@@ -81,3 +81,9 @@ storage:
     - doc
     - docx
   max_file_size: 16777216  # 16MB in bytes
+
+# Deployment configuration
+# export DEPLOY=true
+# export AZURE_OPENAI_API_KEY=your_azure_openai_key
+# export AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
+# export AZURE_OPENAI_API_VERSION=2024-06-01
