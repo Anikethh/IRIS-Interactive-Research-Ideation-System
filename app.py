@@ -84,7 +84,7 @@ def get_api_key(key_name, config_dict):
 
 def extract_abstract(pdf_text):
     full_text = "\n".join(pdf_text)
-    match = re.search(r"(Abstract.*?)(\n|Introduction|Keywords|1\.)", full_text, re.DOTALL | re.IGNORECASE)
+    match = re.search(r"(Abstract.*?)(\n(?:Introduction|Keywords|1\.)|\n{2,})", full_text, re.DOTALL | re.IGNORECASE)
     if match:
         return match.group(1).strip()
     return "No abstract found."
