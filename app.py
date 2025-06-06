@@ -27,7 +27,7 @@ from scholarqa.rag.retrieval import PaperFinder, PaperFinderWithReranker
 from scholarqa.rag.retriever_base import FullTextRetriever
 from scholarqa.rag.reranker.modal_engine import ModalReranker
 from scholarqa.rag.reranker.modal_engine import HuggingFaceReranker
-import fitz  # PyMuPDF for PDF parsing
+import pymupdf  # PyMuPDF for PDF parsing
 # Import the key manager
 # from src.utils.key_manager import encrypt_api_key, decrypt_api_key, get_client_encryption_script
 
@@ -82,6 +82,12 @@ def get_api_key(key_name, config_dict):
     
     return None
 
+def extract_abstract(pdf_text):
+    full_text = "\n".join(pdf_text)
+    match = re.search(r"(Abstract.*?)(\n|Introduction|Keywords|1\.)", full_text, re.DOTALL | re.IGNORECASE)
+    if match:
+        return match.group(1).strip()
+    return "No abstract found."
 
 # Initialize MCTS
 mcts = MCTS("config/config.yaml")
@@ -406,12 +412,19 @@ def chat():
                 chat_messages.append(
                     {"role": "system", "content": "Generating initial idea..."}
                 )
+
+                # Extract the abstract from the knowledge chunks (if available)
+                abstract_text = ""
+                for chunk in knowledge_chunks:
+                    if "abstract" in chunk:
+                        abstract_text = chunk["abstract"]
+                        break 
                 
                 # Create a root state that represents just the research goal
                 root_state = MCTSState(
                     research_goal=user_message,
                     current_idea=user_message,  # Root node "idea" is the research goal itself
-                    retrieved_knowledge=[],
+                    retrieved_knowledge=[abstract_text],  # Pass abstract as retrieved knowledge
                     feedback={},
                     reward=0.0,
                     depth=0,
@@ -1037,6 +1050,9 @@ def upload_file():
     if file.filename == "":
         return jsonify({"error": "No selected file"}), 400
 
+    # Initialize abstract variable
+    abstract = "Abstract could not be extracted"  # Default value in case no abstract is found
+
     if file and allowed_file(file.filename):
         filename = secure_filename(file.filename)
         unique_filename = f"{uuid.uuid4()}_{filename}"
@@ -1050,11 +1066,13 @@ def upload_file():
             if file_path.lower().endswith('.pdf'):
                 try:
                     pdf_text = []
-                    with fitz.open(file_path) as doc:
+                    with pymupdf.open(file_path) as doc:
                         for page_num in range(len(doc)):
                             page = doc.load_page(page_num)
                             pdf_text.append(page.get_text())
                     file_content = "\n".join(pdf_text)
+                    # Extract the abstract from the PDF content
+                    abstract = extract_abstract(pdf_text)
                 except Exception as pdf_err:
                     print(f"Error extracting PDF content: {pdf_err}")
             
@@ -1064,6 +1082,7 @@ def upload_file():
                 "id": new_id,
                 "text": f"Uploaded file: {filename}",
                 "full_text": file_content,
+                "abstract": abstract,  # Added abstract here
                 "source": file_path,
                 "file_type": "attachment",
             }
@@ -1074,6 +1093,7 @@ def upload_file():
                     {
                         "message": "File uploaded successfully",
                         "filename": filename,
+                        "abstract": abstract,
                         "chunk": chunk,
                     }
                 ),
