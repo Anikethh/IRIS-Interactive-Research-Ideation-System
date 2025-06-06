@@ -352,15 +352,17 @@ class IdeationAgent(BaseAgent):
         """Get the appropriate prompt for the given action."""
         research_goal = state.get("research_goal", "")  # Get research_goal directly
         current_idea = state.get("current_idea", "")
+        abstract = state.get("abstract", "")
 
         if action == "generate":
-            return IDEATION_GENERATE_PROMPT.format(research_topic=research_goal or current_idea)
+            return IDEATION_GENERATE_PROMPT.format(research_topic=research_goal or current_idea, abstract=abstract)
         elif action == "generate_query":
             return IDEATION_GENERATE_QUERY_PROMPT.format(research_idea=current_idea)
         elif action == "refresh_idea":
             return IDEATION_REFRESH_APPROACH_PROMPT.format(
                 research_topic=research_goal,
-                current_idea=current_idea
+                current_idea=current_idea,
+                abstract=abstract
             )
         elif action == "refine_with_retrieval":
             # Handle both formats: direct retrieved_content parameter or context_chunks 

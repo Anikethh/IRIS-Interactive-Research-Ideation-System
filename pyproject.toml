@@ -7,7 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "ai2-scholar-qa[all]>=0.5.8",
     "anyascii>=0.3.2",
-    "fitz>=0.0.1.dev2",
+    "pymupdf>=1.26.0",
     "flask>=3.1.0",
     "flask-socketio>=5.5.1",
     "frontend>=0.0.3",
