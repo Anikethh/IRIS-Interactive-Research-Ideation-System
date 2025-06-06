@@ -439,6 +439,7 @@ def chat():
                     {
                         "research_goal": user_message,
                         "current_idea": None,
+                        "abstract": abstract_text,
                         "action_type": "execute"
                     }
                 )
