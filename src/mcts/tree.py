@@ -219,6 +219,12 @@ class MCTS:
                 context_chunks = self._retrieve_relevant_chunks(state.current_idea)
                 state_dict["context_chunks"] = context_chunks
 
+            # Add abstract to state_dict if available
+            if hasattr(state, "abstract") and state.abstract:
+                state_dict["abstract"] = state.abstract  # Include abstract in the state passed to the agent
+                # Debugging print statement
+                print(f"Abstract added to state_dict: {state.abstract}")
+
             # Delegate action execution to ideation agent
             response = self.ideation_agent.execute_action(action, state_dict)
 
