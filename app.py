@@ -391,6 +391,25 @@ def add_knowledge():
     knowledge_chunks.append(chunk)
     return jsonify(chunk), 201
 
+# Add new endpoint for MCTS exploration state
+@app.route("/api/mcts_state", methods=["GET"])
+def get_mcts_state():
+    """Get current MCTS exploration state for the frontend"""
+    try:
+        # Return current node statistics and tree state
+        tree_stats = {
+            "current_score": current_node.state.average_score if current_node and hasattr(current_node.state, 'average_score') else 0,
+            "node_count": len(list(current_node.traverse())) if current_node else 0,
+            "depth": current_node.depth if current_node else 0,
+            "best_score": max([n.state.average_score for n in current_node.traverse() if hasattr(n.state, 'average_score')]) if current_node else 0
+        }
+        
+        return jsonify({
+            "tree_stats": tree_stats,
+            "exploration_active": exploration_in_progress
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/chat", methods=["GET", "POST"])
 def chat():
@@ -556,7 +575,7 @@ def chat():
 
 @app.route("/api/step", methods=["POST"])
 def step():
-    global main_idea, current_node, current_state
+    global main_idea, current_node, current_state, exploration_in_progress, chat_messages
     if current_node is None:
         return jsonify({"error": "Please enter an initial research idea first"}), 400
 
@@ -565,6 +584,7 @@ def step():
         return jsonify({"error": "Invalid payload"}), 400
 
     action = data["action"]
+    use_memory = data.get("use_memory", False)
 
     try:
         # Handle the automatic generation action using UCT algorithm
@@ -573,8 +593,8 @@ def step():
             # First get valid actions
             valid_actions = ["review_and_refine", "retrieve_and_refine", "refresh_idea"]
             
-            # Simple UCT action selection
-            def uct_score(action):
+            # Enhanced memory-aware UCT action selection
+            def uct_score_with_memory(action):
                 # Get the child node for this action if it exists
                 child = None
                 for c in current_node.children:
@@ -586,31 +606,91 @@ def step():
                 if not child:
                     return float('inf')
                 
-                # Calculate UCT score with exploration constant 1.414 (standard)
-                exploitation = child.value  # Use existing value property 
+                # Standard UCT components
+                exploitation = child.value
                 exploration = 1.414 * math.sqrt(math.log(current_node.visits) / max(child.visits, 1))
                 
-                # Add domain-specific heuristics
-                bonus = 0
-                # If low novelty score, prefer retrieve_and_refine
-                if action == "retrieve_and_refine" and hasattr(current_node.state, "review_scores"):
-                    if current_node.state.review_scores.get("novelty", 10) < 7:
-                        bonus += 0.2
+                # Memory-based bonuses
+                memory_bonus = 0
                 
-                # If iteration count is high, prefer refresh_idea occasionally
-                if action == "refresh_idea" and current_node.depth > 3:
-                    bonus += 0.15
+                # 1. Recent performance tracking
+                if hasattr(child.state, 'score_history') and child.state.score_history:
+                    recent_scores = child.state.score_history[-3:]  # Last 3 scores
+                    if len(recent_scores) >= 2:
+                        trend = recent_scores[-1] - recent_scores[0]
+                        memory_bonus += trend * 0.1  # Bonus for improving trends
                 
-                return exploitation + exploration + bonus
+                # 2. Action frequency penalty (avoid overusing same action)
+                if hasattr(current_node.state, 'action_history'):
+                    action_counts = {}
+                    for hist_action in current_node.state.action_history:
+                        action_counts[hist_action] = action_counts.get(hist_action, 0) + 1
+                    
+                    if action in action_counts:
+                        usage_penalty = action_counts[action] * 0.05
+                        memory_bonus -= usage_penalty
+                
+                # 3. Domain-specific heuristics with memory
+                if action == "retrieve_and_refine":
+                    # Check novelty score from memory
+                    if hasattr(current_node.state, "review_scores"):
+                        novelty_score = current_node.state.review_scores.get("novelty", 5)
+                        if novelty_score < 7:
+                            memory_bonus += 0.3  # Strong bonus for low novelty
+                    
+                    # Check if we've already done retrieval recently
+                    if hasattr(current_node.state, 'action_history'):
+                        recent_actions = current_node.state.action_history[-3:]
+                        if recent_actions.count("retrieve_and_refine") >= 2:
+                            memory_bonus -= 0.2  # Penalty for recent overuse
+                
+                # 4. Attention pattern bonus (differential attention simulation)
+                if hasattr(child.state, "attention_patterns"):
+                    relevant_attention = child.state.attention_patterns.get("relevant_focus", 0.5)
+                    memory_bonus += (relevant_attention - 0.5) * 0.2
+                
+                return exploitation + exploration + memory_bonus
             
-            # Select action with highest UCT score
-            selected_action = max(valid_actions, key=uct_score)
-            
-            # Add system message about the selected action
-            chat_messages.append({
-                "role": "system", 
-                "content": f"Auto-generating using '{selected_action.replace('_', ' ')}' strategy..."
-            })
+            # Use memory-aware selection if use_memory flag is set
+            if use_memory:
+                selected_action = max(valid_actions, key=uct_score_with_memory)
+                
+                # Generate memory insights
+                memory_insights = generate_memory_insights(current_node, selected_action)
+                chat_messages.append({
+                    "role": "system",
+                    "content": f"🧠 Memory-guided selection: {selected_action.replace('_', ' ')} (Reason: {memory_insights})"
+                })
+            else:
+                # Standard UCT selection (original code)
+                def uct_score(action):
+                    child = None
+                    for c in current_node.children:
+                        if c.action == action:
+                            child = c
+                            break
+                    
+                    if not child:
+                        return float('inf')
+                    
+                    exploitation = child.value
+                    exploration = 1.414 * math.sqrt(math.log(current_node.visits) / max(child.visits, 1))
+                    
+                    bonus = 0
+                    if action == "retrieve_and_refine" and hasattr(current_node.state, "review_scores"):
+                        if current_node.state.review_scores.get("novelty", 10) < 7:
+                            bonus += 0.2
+                    
+                    if action == "refresh_idea" and current_node.depth > 3:
+                        bonus += 0.15
+                    
+                    return exploitation + exploration + bonus
+                
+                selected_action = max(valid_actions, key=uct_score)
+                chat_messages.append({
+                    "role": "system", 
+                    "content": f"Auto-generating using '{selected_action.replace('_', ' ')}' strategy..."
+                })
             
             # Recursively call this function with the selected action
             return step_action(selected_action)
@@ -678,9 +758,21 @@ def step():
                 current_idea=current_node.state.current_idea,
                 retrieved_knowledge=current_node.state.retrieved_knowledge.copy(),
                 feedback=detailed_reviews,
-                depth=current_node.state.depth + 1
+                depth=current_node.state.depth + 1,
+                # Copy ALL memory components
+                trajectory_memory=getattr(current_node.state, 'trajectory_memory', []).copy(),
+                action_history=getattr(current_node.state, 'action_history', []).copy(),
+                score_history=getattr(current_node.state, 'score_history', []).copy(),
+                knowledge_cache=getattr(current_node.state, 'knowledge_cache', {}).copy(),
+                attention_patterns=getattr(current_node.state, 'attention_patterns', {}).copy(),
+                exploration_metadata=getattr(current_node.state, 'exploration_metadata', {}).copy()
             )
             
+            review_outcome = {
+                "aspects_reviewed": len(detailed_reviews),
+                "lowest_aspects": [aspect for aspect, score in aspect_scores],
+                "improvement_detected": False  # Will be updated after new review
+            }
             # Get improved idea from ideation agent
             response = mcts.ideation_agent.execute_action(
                 "review_and_refine",
@@ -697,10 +789,32 @@ def step():
             # Get new review scores
             new_review = review_agent.unified_review(improvement_state.current_idea)
             if new_review:
-                improvement_state.review_scores = new_review.get("scores", {})
-                improvement_state.review_feedback = new_review.get("reviews", {})
-                improvement_state.average_score = new_review.get("average_score", 0.0)
-                improvement_state.reward = new_review.get("average_score", 0.0) / 10
+                current_score = getattr(current_node.state, "average_score", 0)
+                new_score = new_review.get("average_score", 0)
+                review_outcome["improvement_detected"] = new_score > current_score
+                review_outcome["score_increase"] = new_score - current_score
+                review_outcome["aspects_improved"] = sum(1 for aspect in review_outcome["lowest_aspects"] 
+                                                       if new_review.get("scores", {}).get(aspect, 0) > 
+                                                       current_node.state.review_scores.get(aspect, 0))
+                
+                # Update review scores and metadata in improvement_state
+                if "scores" in new_review:
+                    improvement_state.review_scores = new_review["scores"]
+                if "reviews" in new_review:
+                    improvement_state.review_feedback = new_review["reviews"]
+                if "average_score" in new_review:
+                    improvement_state.average_score = new_review["average_score"]
+                    improvement_state.reward = new_review["average_score"]
+                
+                # Add memory entry
+                improvement_state.add_memory_entry(
+                    action="review_and_refine",
+                    outcome=review_outcome,
+                    score=new_score
+                )
+                
+                # Update attention patterns
+                improvement_state.update_attention_patterns("review_and_refine", review_outcome)
             
             # Create new node and update current
             new_node = current_node.add_child(improvement_state, action)
@@ -757,6 +871,13 @@ def step():
             
             search_results = scholar_qa.answer_query(query)
             
+            # After creating retrieval_state, add memory tracking:
+            retrieval_outcome = {
+                "papers_found": len(search_results.get("sections", [])) if search_results else 0,
+                "query_used": query,
+                "improvement_detected": False  # Will be updated after review
+            }
+
             # Add message showing search results
             if search_results and "sections" in search_results:
                 chat_messages.append({
@@ -770,7 +891,14 @@ def step():
                 current_idea=current_node.state.current_idea,
                 retrieved_knowledge=current_node.state.retrieved_knowledge + [search_results],
                 feedback=current_node.state.feedback.copy(),
-                depth=current_node.state.depth + 1
+                depth=current_node.state.depth + 1,
+                # Copy ALL memory components
+                trajectory_memory=getattr(current_node.state, 'trajectory_memory', []).copy(),
+                action_history=getattr(current_node.state, 'action_history', []).copy(),
+                score_history=getattr(current_node.state, 'score_history', []).copy(),
+                knowledge_cache=getattr(current_node.state, 'knowledge_cache', {}).copy(),
+                attention_patterns=getattr(current_node.state, 'attention_patterns', {}).copy(),
+                exploration_metadata=getattr(current_node.state, 'exploration_metadata', {}).copy()
             )
             
             # Improve idea with retrieved knowledge
@@ -788,11 +916,31 @@ def step():
             
             # Get new review scores
             new_review = review_agent.unified_review(retrieval_state.current_idea)
+            # After getting new_review, update the outcome and add memory entry:
             if new_review:
-                retrieval_state.review_scores = new_review.get("scores", {})
-                retrieval_state.review_feedback = new_review.get("reviews", {})
-                retrieval_state.average_score = new_review.get("average_score", 0.0)
-                retrieval_state.reward = new_review.get("average_score", 0.0) / 10
+                current_score = getattr(current_node.state, "average_score", 0)
+                new_score = new_review.get("average_score", 0)
+                retrieval_outcome["improvement_detected"] = new_score > current_score
+                retrieval_outcome["score_increase"] = new_score - current_score
+                
+                # Update review scores and metadata in retrieval_state
+                if "scores" in new_review:
+                    retrieval_state.review_scores = new_review["scores"]
+                if "reviews" in new_review:
+                    retrieval_state.review_feedback = new_review["reviews"]
+                if "average_score" in new_review:
+                    retrieval_state.average_score = new_review["average_score"]
+                    retrieval_state.reward = new_review["average_score"]
+                
+                # Add memory entry
+                retrieval_state.add_memory_entry(
+                    action="retrieve_and_refine",
+                    outcome=retrieval_outcome,
+                    score=new_score
+                )
+                
+                # Update attention patterns
+                retrieval_state.update_attention_patterns("retrieve_and_refine", retrieval_outcome)
             
             # Create new node and update current
             new_node = current_node.add_child(retrieval_state, action)
@@ -820,18 +968,59 @@ def step():
             refresh_state = MCTSState(
                 research_goal=research_goal,
                 current_idea=response["content"],
-                retrieved_knowledge=[],  # Start with empty retrieved knowledge for new approach
-                feedback={},  # Start with empty feedback for new approach
-                depth=1  # Directly connected to root, so depth is 1
+                retrieved_knowledge=[],  # Start with empty for new approach
+                feedback={},  # Start with empty for new approach
+                depth=1,  # Directly connected to root
+                # Copy some memory components (not all since it's a refresh)
+                trajectory_memory=getattr(current_node.state, 'trajectory_memory', []).copy(),
+                action_history=getattr(current_node.state, 'action_history', []).copy(),
+                score_history=getattr(current_node.state, 'score_history', []).copy(),
+                knowledge_cache={},  # Reset for fresh perspective
+                attention_patterns={
+                    "relevant_focus": 0.6,
+                    "noise_reduction": 0.5,
+                    "context_awareness": 0.4
+                },
+                exploration_metadata=getattr(current_node.state, 'exploration_metadata', {}).copy()
             )
-            
+
+            # After creating refresh_state, add memory tracking:
+            refresh_outcome = {
+                "new_approach": True,
+                "based_on_goal": bool(research_goal),
+                "improvement_detected": False  # Will be updated after review
+            }
+
             # Get new review scores
             new_review = review_agent.unified_review(refresh_state.current_idea)
             if new_review:
-                refresh_state.review_scores = new_review.get("scores", {})
-                refresh_state.review_feedback = new_review.get("reviews", {})
-                refresh_state.average_score = new_review.get("average_score", 0.0)
-                refresh_state.reward = new_review.get("average_score", 0.0) / 10
+                current_score = getattr(current_node.state, "average_score", 0)
+                new_score = new_review.get("average_score", 0)
+                refresh_outcome["improvement_detected"] = new_score > current_score
+                refresh_outcome["score_increase"] = new_score - current_score
+                
+                # Update review scores and metadata in refresh_state
+                if "scores" in new_review:
+                    refresh_state.review_scores = new_review["scores"]
+                if "reviews" in new_review:
+                    refresh_state.review_feedback = new_review["reviews"]
+                if "average_score" in new_review:
+                    refresh_state.average_score = new_review["average_score"]
+                    refresh_state.reward = new_review["average_score"]
+                
+                # Add memory entry
+                refresh_state.add_memory_entry(
+                    action="refresh_idea",
+                    outcome=refresh_outcome,
+                    score=new_score
+                )
+                
+                # Refresh gets neutral attention patterns since it's a new start
+                refresh_state.attention_patterns = {
+                    "relevant_focus": 0.6,  # Slightly higher since it's goal-focused
+                    "noise_reduction": 0.5,
+                    "context_awareness": 0.4
+                }
             
             # Create new node and add as child of the ROOT node instead of current node
             new_node = current_root.add_child(refresh_state, action)
@@ -850,7 +1039,7 @@ def step():
             return jsonify({"error": "Invalid action"}), 400
 
         # Return updated state
-        return jsonify({
+        response_data = {
             "idea": main_idea,
             "nodeId": current_node.id,
             "action": action,
@@ -858,13 +1047,127 @@ def step():
             "review_scores": getattr(current_node.state, "review_scores", {}),
             "average_score": getattr(current_node.state, "average_score", 0.0),
             "retrieved_knowledge": bool(current_node.state.retrieved_knowledge),
-            "has_feedback": bool(current_node.state.feedback)
-        })
+            "has_feedback": bool(current_node.state.feedback),
+            "messages": chat_messages  # Include chat messages for frontend
+        }
+        
+        # Add memory insights if using memory-aware selection
+        if use_memory and current_node:
+            memory_insights = generate_memory_insights(current_node, action)
+            response_data["memory_insights"] = memory_insights
+            response_data["trajectory_length"] = len(getattr(current_node.state, 'trajectory_memory', []))
+        
+        return jsonify(response_data)
 
     except Exception as e:
         error_message = f"Error executing {action}: {str(e)}"
         traceback.print_exc()
         return jsonify({"error": error_message}), 500
+    
+# Replace the generate_memory_insights function around line 1050
+
+def generate_memory_insights(node, action):
+    """Generate human-readable insights from memory"""
+    insights = []
+    
+    # Get memory components safely
+    action_history = getattr(node.state, 'action_history', [])
+    score_history = getattr(node.state, 'score_history', [])
+    
+    # Action frequency analysis with more detail
+    if action_history:
+        action_counts = {}
+        for hist_action in action_history:
+            action_counts[hist_action] = action_counts.get(hist_action, 0) + 1
+        
+        if action in action_counts:
+            count = action_counts[action]
+            if count == 0:
+                insights.append(f"First time using '{action}'")
+            elif count >= 3:
+                insights.append(f"Action '{action}' used {count} times - may be overused")
+            else:
+                insights.append(f"Action '{action}' used {count} times before")
+        else:
+            insights.append(f"Action '{action}' never used - high exploration potential")
+    
+    # Score trend analysis with more detail
+    if len(score_history) >= 3:
+        recent_scores = score_history[-3:]
+        recent_avg = sum(recent_scores) / len(recent_scores)
+        
+        if len(score_history) >= 6:
+            earlier_scores = score_history[-6:-3]
+            earlier_avg = sum(earlier_scores) / len(earlier_scores)
+            trend = recent_avg - earlier_avg
+        else:
+            # Compare with overall average if not enough history
+            overall_avg = sum(score_history) / len(score_history)
+            trend = recent_avg - overall_avg
+        
+        if trend > 0.5:
+            insights.append(f"Strong improvement trend (+{trend:.1f})")
+        elif trend > 0.2:
+            insights.append(f"Slight improvement trend (+{trend:.1f})")
+        elif trend < -0.5:
+            insights.append(f"Declining performance ({trend:.1f})")
+        elif trend < -0.2:
+            insights.append(f"Slight decline ({trend:.1f})")
+        else:
+            insights.append("Performance stable")
+    
+    # Domain-specific reasoning
+    if action == "retrieve_and_refine":
+        retrieval_count = action_history.count("retrieve_and_refine")
+        if retrieval_count == 0:
+            insights.append("First knowledge retrieval - exploring external sources")
+        else:
+            insights.append(f"Knowledge retrieval #{retrieval_count + 1}")
+        
+        # Check novelty from review scores
+        if hasattr(node.state, "review_scores"):
+            novelty_score = node.state.review_scores.get("novelty", 5)
+            if novelty_score < 7:
+                insights.append(f"Low novelty ({novelty_score}/10) - seeking new knowledge")
+            else:
+                insights.append(f"Good novelty ({novelty_score}/10) - exploring enhancement")
+    
+    elif action == "review_and_refine":
+        review_count = action_history.count("review_and_refine")
+        if review_count == 0:
+            insights.append("First review-based improvement")
+        else:
+            insights.append(f"Review refinement #{review_count + 1}")
+        
+        # Check for consistent low scores
+        if hasattr(node.state, "review_scores"):
+            low_scores = [aspect for aspect, score in node.state.review_scores.items() if score < 7]
+            if low_scores:
+                insights.append(f"Addressing low scores in: {', '.join(low_scores)}")
+    
+    elif action == "refresh_idea":
+        refresh_count = action_history.count("refresh_idea")
+        if refresh_count == 0:
+            insights.append("First idea refresh - exploring new directions")
+        else:
+            insights.append(f"Idea refresh #{refresh_count + 1} - seeking breakthrough")
+        
+        # Check if refresh is due to stagnation
+        if len(score_history) >= 3:
+            recent_variation = max(score_history[-3:]) - min(score_history[-3:])
+            if recent_variation < 0.3:
+                insights.append("Breaking out of stagnation")
+    
+    # Overall exploration strategy
+    total_actions = len(action_history)
+    if total_actions >= 3:
+        diversity = len(set(action_history)) / len(action_history)
+        if diversity > 0.8:
+            insights.append("High exploration diversity")
+        elif diversity < 0.4:
+            insights.append("Focused exploitation strategy")
+    
+    return "; ".join(insights) if insights else "Initial exploration step"
 
 # Helper function to avoid code duplication
 def step_action(action):
@@ -894,16 +1197,20 @@ def step_action(action):
 @app.route("/api/tree", methods=["GET"])
 def get_tree():
     if current_root is None:
-        return jsonify({}), 200  # Return empty object instead of error
+        return jsonify({"error": "No tree structure available"}), 400
 
     def node_to_dict(node):
         # Get basic info about the node
         is_root = node.parent is None
         
+        # Ensure node has an ID
+        if not hasattr(node, 'id') or not node.id:
+            node.id = str(uuid.uuid4())
+        
         # For root node, use special formatting to show it's the research goal
         if is_root:
             node_data = {
-                "id": node.id,
+                "id": node.id,  # Make sure ID is included
                 "action": "research_goal",  # Special action type for root
                 "idea": "RESEARCH GOAL: " + (node.state.research_goal[:80] + "..." if len(node.state.research_goal) > 80 else node.state.research_goal),
                 "depth": node.state.depth,
@@ -915,6 +1222,7 @@ def get_tree():
                     "current_idea": node.state.research_goal,  # For root, use research_goal as current_idea
                     "depth": node.state.depth,
                     "reward": node.state.reward,
+                    "average_score": getattr(node.state, "average_score", 0.0),
                     "hasReviews": False,  # Root node has no reviews
                     "hasRetrieval": False,  # Root node has no retrieval
                     "hasFeedback": False,  # Root node has no feedback
@@ -925,7 +1233,7 @@ def get_tree():
         else:
             # Regular node formatting for ideas
             node_data = {
-                "id": node.id,
+                "id": node.id,  # Make sure ID is included
                 "action": node.action or "unknown",
                 "idea": node.state.current_idea[:100] + "..." if len(node.state.current_idea) > 100 else node.state.current_idea,
                 "depth": node.state.depth,
@@ -937,97 +1245,128 @@ def get_tree():
                     "current_idea": node.state.current_idea,
                     "depth": node.state.depth,
                     "reward": node.state.reward,
-                    "hasReviews": hasattr(node.state, "review_scores") and bool(node.state.review_scores),
+                    "average_score": getattr(node.state, "average_score", 0.0),
+                    "review_scores": getattr(node.state, "review_scores", {}),
+                    "hasReviews": bool(getattr(node.state, "review_scores", {})),
                     "hasRetrieval": bool(node.state.retrieved_knowledge),
                     "hasFeedback": bool(node.state.feedback),
-                    "isResearchGoal": False  # Regular nodes are not research goals
+                    "isResearchGoal": False
                 },
                 "children": [node_to_dict(child) for child in node.children]
             }
-            
-            # Add review data if available
-            if hasattr(node.state, "review_scores") and node.state.review_scores:
-                node_data["reviews"] = {
-                    "scores": node.state.review_scores,
-                    "summary": getattr(node.state, "review_summary", {})
-                }
         
         return node_data
 
-    tree_data = node_to_dict(current_root)
-    return jsonify(tree_data)
+    try:
+        tree_data = node_to_dict(current_root)
+        return jsonify(tree_data)
+    except Exception as e:
+        print(f"Error in get_tree: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"Error building tree: {str(e)}"}), 500
 
 
 @app.route("/api/node", methods=["POST"])
 def select_node():
     global current_node, main_idea, chat_messages
-    data = request.get_json()
-    if not data or "node_id" not in data:
-        return jsonify({"error": "Invalid payload"}), 400
-
-    node_id = data["node_id"]
     
-    def find_node(root, target_id):
-        """Recursively find a node by ID in the tree."""
-        if root.id == target_id:
-            return root
-        for child in root.children:
-            result = find_node(child, target_id)
-            if result:
-                return result
-        return None
+    try:
+        data = request.get_json()
+        print(f"Node selection request data: {data}")
+        
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+            
+        if "node_id" not in data:
+            return jsonify({"error": f"Missing node_id in payload. Received keys: {list(data.keys())}"}), 400
 
-    # Find the node in the tree
-    node = find_node(current_root, node_id)
-    
-    if node:
-        # Update current node and idea
-        current_node = node
-        main_idea = node.state.current_idea
+        node_id = data["node_id"]
+        force_sync = data.get("force_sync", False)
         
-        # Log this action in chat
-        chat_messages.append({
-            "role": "system", 
-            "content": f"Navigated to node {node_id} with action '{node.action or 'root'}'."
-        })
+        print(f"Looking for node with ID: {node_id}, force_sync: {force_sync}")
         
-        # Prepare response data
-        response = {
-            "idea": main_idea,
-            "node_data": {
-                "id": node.id,
-                "action": node.action or "root",
-                "depth": node.state.depth,
-                "reward": node.state.reward
-            },
-            "review_scores": getattr(node.state, "review_scores", {}),
-            "average_score": getattr(node.state, "average_score", 0.0),
-        }
+        def find_node(root, target_id):
+            """Recursively find a node by ID in the tree."""
+            print(f"Checking node {root.id} against target {target_id}")
+            if root.id == target_id:
+                return root
+            for child in root.children:
+                result = find_node(child, target_id)
+                if result:
+                    return result
+            return None
         
-        # Include review data if available
-        if hasattr(node.state, "review_scores") and node.state.review_scores:
-            response["reviews"] = {
-                "scores": node.state.review_scores,
-                "feedback": node.state.review_feedback,
-                "summary": getattr(node.state, "review_summary", {})
+        # Find the node in the tree
+        if not current_root:
+            return jsonify({"error": "No tree structure available"}), 400
+        
+        # If force_sync is requested, refresh the tree structure
+        if force_sync:
+            print("Force sync requested, refreshing tree structure")
+            # Add any tree refresh logic here if needed
+            
+        node = find_node(current_root, node_id)
+        print(f"Found node: {node}")
+        
+        if node:
+            # Update current node and idea
+            current_node = node
+            main_idea = node.state.current_idea
+            
+            # Log this action in chat
+            chat_messages.append({
+                "role": "system", 
+                #"content": f"Navigated to node {node_id} with action '{node.action or 'root'}'."
+            })
+            
+            # Prepare response data
+            response = {
+                "idea": main_idea,
+                "node_data": {
+                    "id": node.id,
+                    "action": node.action or "root",
+                    "depth": node.state.depth,
+                    "reward": node.state.reward
+                },
+                "review_scores": getattr(node.state, "review_scores", {}),
+                "average_score": getattr(node.state, "average_score", 0.0),
+                "messages": chat_messages[-5:],  # Include recent messages
+                "sync_status": "success" if force_sync else "normal"
             }
-        
-        # Include trajectory history
-        if node.parent:
-            trajectory = []
-            current = node
-            while current.parent:
-                trajectory.append({
-                    "id": current.id,
-                    "action": current.action,
-                    "depth": current.state.depth
-                })
-                current = current.parent
-            response["trajectory"] = list(reversed(trajectory))
-        
-        return jsonify(response)
-    else:
-        return jsonify({"error": f"Node with ID {node_id} not found"}), 404
+            
+            # Include review data if available
+            if hasattr(node.state, "review_scores") and node.state.review_scores:
+                response["reviews"] = {
+                    "scores": node.state.review_scores,
+                    "feedback": getattr(node.state, "review_feedback", {}),
+                    "summary": getattr(node.state, "review_summary", {})
+                }
+            
+            print(f"Returning response: {response}")
+            return jsonify(response)
+        else:
+            # Log available node IDs for debugging
+            available_ids = []
+            def collect_ids(node):
+                available_ids.append(node.id)
+                for child in node.children:
+                    collect_ids(child)
+            
+            if current_root:
+                collect_ids(current_root)
+            
+            return jsonify({
+                "error": f"Node with ID {node_id} not found",
+                "available_node_ids": available_ids[:10],
+                "force_sync_attempted": force_sync
+            }), 404
+            
+    except Exception as e:
+        print(f"Error in select_node: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
 
 
 @app.route("/api/idea", methods=["GET"])
@@ -1757,3 +2096,138 @@ def check_configuration():
 
 if __name__ == "__main__":
     socketio.run(app, debug=True)
+
+
+@app.route("/api/memory_state", methods=["GET"])
+def get_memory_state():
+    """Get current memory state for visualization"""
+    if current_node is None:
+        return jsonify({"error": "No active node"}), 400
+    
+    try:
+        memory_data = {
+            "trajectory_length": len(getattr(current_node.state, 'trajectory_memory', [])),
+            "action_distribution": {},
+            "score_trend": getattr(current_node.state, 'score_history', [])[-10:],  # Last 10 scores
+            "knowledge_cache_size": len(getattr(current_node.state, 'knowledge_cache', {})),
+            "attention_patterns": getattr(current_node.state, 'attention_patterns', {}),
+            "exploration_stats": getattr(current_node.state, 'exploration_metadata', {}),
+            "current_depth": current_node.state.depth,
+            "total_visits": getattr(current_node.state, 'exploration_metadata', {}).get('visit_count', 0)
+        }
+        
+        # Calculate action distribution
+        action_history = getattr(current_node.state, 'action_history', [])
+        for action in action_history:
+            memory_data["action_distribution"][action] = memory_data["action_distribution"].get(action, 0) + 1
+        
+        return jsonify(memory_data)
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/memory_insights", methods=["GET"])
+def get_memory_insights():
+    """Get detailed memory insights"""
+    if current_node is None:
+        return jsonify({"error": "No active node"}), 400
+    
+    try:
+        insights = {
+            "performance_trends": analyze_performance_trends(current_node),
+            "action_effectiveness": analyze_action_effectiveness(current_node),
+            "knowledge_utilization": analyze_knowledge_utilization(current_node),
+            "exploration_patterns": analyze_exploration_patterns(current_node),
+            "attention_analysis": analyze_attention_patterns(current_node)
+        }
+        
+        return jsonify(insights)
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+def analyze_performance_trends(node):
+    """Analyze performance trends from memory"""
+    score_history = getattr(node.state, 'score_history', [])
+    
+    if len(score_history) < 3:
+        return {"trend": "insufficient_data", "message": "Need more data points"}
+    
+    recent_avg = sum(score_history[-3:]) / 3
+    earlier_avg = sum(score_history[:3]) / 3
+    
+    if recent_avg > earlier_avg + 0.5:
+        return {"trend": "improving", "message": f"Performance improved by {recent_avg - earlier_avg:.1f}"}
+    elif recent_avg < earlier_avg - 0.5:
+        return {"trend": "declining", "message": f"Performance declined by {earlier_avg - recent_avg:.1f}"}
+    else:
+        return {"trend": "stable", "message": "Performance relatively stable"}
+
+def analyze_action_effectiveness(node):
+    """Analyze which actions have been most effective"""
+    trajectory_memory = getattr(node.state, 'trajectory_memory', [])
+    action_scores = {}
+    
+    for entry in trajectory_memory:
+        action = entry["action"]
+        score = entry["score"]
+        
+        if action not in action_scores:
+            action_scores[action] = []
+        action_scores[action].append(score)
+    
+    effectiveness = {}
+    for action, scores in action_scores.items():
+        if scores:
+            effectiveness[action] = {
+                "avg_score": sum(scores) / len(scores),
+                "count": len(scores),
+                "max_score": max(scores),
+                "min_score": min(scores),
+                "trend": "improving" if len(scores) > 1 and scores[-1] > scores[0] else "stable"
+            }
+    
+    return effectiveness
+
+def analyze_knowledge_utilization(node):
+    """Analyze how knowledge retrieval has been used"""
+    retrieved_knowledge = getattr(node.state, 'retrieved_knowledge', [])
+    knowledge_cache = getattr(node.state, 'knowledge_cache', {})
+    
+    return {
+        "total_retrievals": len(retrieved_knowledge),
+        "cached_items": len(knowledge_cache),
+        "retrieval_frequency": getattr(node.state, 'action_history', []).count("retrieve_and_refine"),
+        "knowledge_diversity": len(set(str(k) for k in retrieved_knowledge))  # Rough diversity measure
+    }
+
+def analyze_exploration_patterns(node):
+    """Analyze exploration patterns and behavior"""
+    exploration_metadata = getattr(node.state, 'exploration_metadata', {})
+    action_history = getattr(node.state, 'action_history', [])
+    
+    # Action sequence analysis
+    action_sequences = {}
+    for i in range(len(action_history) - 1):
+        sequence = f"{action_history[i]} -> {action_history[i+1]}"
+        action_sequences[sequence] = action_sequences.get(sequence, 0) + 1
+    
+    return {
+        "visit_count": exploration_metadata.get("visit_count", 0),
+        "performance_trend": exploration_metadata.get("performance_trend", "unknown"),
+        "exploration_depth": node.state.depth,
+        "action_sequences": action_sequences,
+        "exploration_diversity": len(set(action_history)) / max(len(action_history), 1)
+    }
+
+def analyze_attention_patterns(node):
+    """Analyze attention patterns and focus"""
+    attention_patterns = getattr(node.state, 'attention_patterns', {})
+    
+    return {
+        "relevant_focus": attention_patterns.get("relevant_focus", 0.5),
+        "noise_reduction": attention_patterns.get("noise_reduction", 0.5),
+        "context_awareness": attention_patterns.get("context_awareness", 0.5),
+        "overall_attention_score": sum(attention_patterns.values()) / len(attention_patterns) if attention_patterns else 0.5,
+        "attention_balance": "focused" if attention_patterns.get("relevant_focus", 0.5) > 0.7 else "exploratory"
+    }

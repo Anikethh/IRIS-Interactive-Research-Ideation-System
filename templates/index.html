@@ -409,7 +409,7 @@
             border-radius: 6px;
             background-color: #f8fafc;
         }
-
+        
         .api-key-input {
             margin-bottom: 1.5rem;
         }
@@ -569,6 +569,211 @@
         .pdf-button:hover {
             background: #e4e6eb;
         }
+
+        .memory-panel {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        width: 320px;
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        z-index: 1000;
+        font-size: 12px;
+        }
+
+        .memory-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 16px;
+        background: #6c757d;
+        color: white;
+        border-radius: 8px 8px 0 0;
+        }
+
+        .memory-header h3 {
+            margin: 0;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .memory-close {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 18px;
+            cursor: pointer;
+            padding: 0;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .memory-content {
+            padding: 16px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .memory-stats {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .stat {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .stat label {
+            font-weight: 500;
+            color: #495057;
+        }
+
+        .trend-improving {
+            color: #28a745;
+            font-weight: bold;
+        }
+
+        .trend-declining {
+            color: #dc3545;
+            font-weight: bold;
+        }
+
+        .trend-stable {
+            color: #6c757d;
+        }
+
+        .attention-patterns h4,
+        .action-distribution h4 {
+            margin: 0 0 12px 0;
+            font-size: 13px;
+            color: #495057;
+            font-weight: 600;
+        }
+
+        .attention-bars {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .attention-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .attention-bar label {
+            min-width: 80px;
+            font-size: 11px;
+            color: #6c757d;
+        }
+
+        .bar-container {
+            flex: 1;
+            height: 8px;
+            background: #e9ecef;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .bar {
+            height: 100%;
+            transition: width 0.3s ease;
+        }
+
+        .relevant-focus {
+            background: linear-gradient(90deg, #28a745, #20c997);
+        }
+
+        .context-awareness {
+            background: linear-gradient(90deg, #007bff, #6610f2);
+        }
+
+        .noise-reduction {
+            background: linear-gradient(90deg, #ffc107, #fd7e14);
+        }
+
+        .bar-value {
+            min-width: 30px;
+            text-align: right;
+            font-size: 11px;
+            color: #6c757d;
+        }
+
+        .action-chart {
+            margin-bottom: 16px;
+        }
+
+        .action-bar-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+
+        .action-name {
+            min-width: 80px;
+            font-size: 11px;
+            color: #495057;
+            text-transform: capitalize;
+        }
+
+        .action-bar-container {
+            flex: 1;
+            height: 6px;
+            background: #e9ecef;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .action-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #6c757d, #495057);
+            transition: width 0.3s ease;
+        }
+
+        .action-count {
+            min-width: 20px;
+            text-align: right;
+            font-size: 11px;
+            color: #6c757d;
+        }
+
+        #performance-trend-chart {
+            width: 100%;
+            height: 60px;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            background: white;
+        }
+
+        .memory-system-message {
+            background: #e3f2fd !important;
+            border-left: 4px solid #2196f3 !important;
+            padding: 12px !important;
+            margin: 8px 0 !important;
+            border-radius: 0 6px 6px 0 !important;
+        }
+
+        .memory-insight {
+            background: #f3e5f5 !important;
+            border-left: 4px solid #9c27b0 !important;
+            padding: 8px 12px !important;
+            margin: 4px 0 !important;
+            border-radius: 0 4px 4px 0 !important;
+            font-size: 13px !important;
+        }
     </style>
     <script src="{{ url_for('static', filename='js/secure-keys.js') }}"></script>
 </head>
@@ -609,7 +814,7 @@
         <div class="chat">
             <div class="top-bar">
                 <div class="top-bar-buttons">
-                    <button class="auto-generate" onclick="event.preventDefault(); toggleAutoGenerate(); stepAction('generate'); return false;">
+                    <button class="auto-generate" onclick="event.preventDefault(); toggleAutoGenerate(); return false;">
                         <img src="{{ url_for('static', filename='icons/auto.svg') }}" alt="Auto">
                         <span>Automate Generation</span>
                     </button>

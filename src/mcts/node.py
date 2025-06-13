@@ -21,7 +21,15 @@ class MCTSState:
         depth: int = 0, 
         reward: float = 0,
         retrieved_knowledge: Optional[List[Dict[str, Any]]] = None,
-        feedback: Optional[Dict[str, Any]] = None
+        feedback: Optional[Dict[str, Any]] = None,
+        # Enhanced memory components
+        trajectory_memory: List[Dict] = None,
+        action_history: List[str] = None,
+        score_history: List[float] = None,
+        knowledge_cache: Dict = None,
+        attention_patterns: Dict = None,
+        exploration_metadata: Dict = None
+        
     ):
         self.research_goal = research_goal
         self.current_idea = current_idea or ""
@@ -32,6 +40,23 @@ class MCTSState:
         self.average_score = 0.0  # Average score across all criteria
         self.retrieved_knowledge = retrieved_knowledge or []  # Knowledge retrieved for this state
         self.feedback = feedback or {}  # General feedback for this state
+        # Enhanced memory components
+        self.trajectory_memory = trajectory_memory or []
+        self.action_history = action_history or []
+        self.score_history = score_history or []
+        self.knowledge_cache = knowledge_cache or {}
+        self.attention_patterns = attention_patterns or {
+            "relevant_focus": 0.5,
+            "noise_reduction": 0.3,
+            "context_awareness": 0.4
+        }
+        self.exploration_metadata = exploration_metadata or {
+            "visit_count": 0,
+            "last_visited": None,
+            "parent_path": [],
+            "sibling_comparisons": [],
+            "performance_trend": "stable"
+        }
 
     def __eq__(self, other):
         if isinstance(other, MCTSState):
@@ -54,6 +79,89 @@ class MCTSState:
             "retrieved_knowledge": self.retrieved_knowledge,
             "feedback": self.feedback
         }
+
+    def add_memory_entry(self, action: str, outcome: Dict, score: float):
+        """Add a new entry to trajectory memory"""
+        from datetime import datetime
+        
+        # Initialize memory components if they don't exist
+        if not hasattr(self, 'trajectory_memory'):
+            self.trajectory_memory = []
+        if not hasattr(self, 'action_history'):
+            self.action_history = []
+        if not hasattr(self, 'score_history'):
+            self.score_history = []
+        if not hasattr(self, 'exploration_metadata'):
+            self.exploration_metadata = {
+                "visit_count": 0,
+                "last_visited": None,
+                "parent_path": [],
+                "sibling_comparisons": [],
+                "performance_trend": "stable"
+            }
+        
+        memory_entry = {
+            "timestamp": datetime.now().isoformat(),
+            "action": action,
+            "outcome": outcome,
+            "score": score,
+            "depth": self.depth,
+            "context": {
+                "idea_length": len(self.current_idea),
+                "knowledge_count": len(self.retrieved_knowledge),
+                "feedback_count": len(self.feedback)
+            }
+        }
+        self.trajectory_memory.append(memory_entry)
+        self.action_history.append(action)
+        self.score_history.append(score)
+        
+        # Update exploration metadata
+        self.exploration_metadata["visit_count"] += 1
+        self.exploration_metadata["last_visited"] = memory_entry["timestamp"]
+        
+        # Update performance trend
+        if len(self.score_history) >= 3:
+            recent_avg = sum(self.score_history[-3:]) / 3
+            earlier_avg = sum(self.score_history[-6:-3]) / 3 if len(self.score_history) >= 6 else recent_avg
+            
+            if recent_avg > earlier_avg + 0.3:
+                self.exploration_metadata["performance_trend"] = "improving"
+            elif recent_avg < earlier_avg - 0.3:
+                self.exploration_metadata["performance_trend"] = "declining"
+            else:
+                self.exploration_metadata["performance_trend"] = "stable"
+
+    def update_attention_patterns(self, action: str, outcome: Dict):
+        """Update attention patterns based on action outcomes"""
+        # Initialize attention patterns if they don't exist
+        if not hasattr(self, 'attention_patterns'):
+            self.attention_patterns = {
+                "relevant_focus": 0.5,
+                "noise_reduction": 0.3,
+                "context_awareness": 0.4
+            }
+        
+        if action == "retrieve_and_refine":
+            # Update based on retrieval success
+            papers_found = outcome.get("papers_found", 0)
+            improvement_detected = outcome.get("improvement_detected", False)
+            
+            self.attention_patterns["relevant_focus"] = min(1.0, papers_found / 5.0)
+            self.attention_patterns["noise_reduction"] = 0.8 if improvement_detected else 0.3
+            
+        elif action == "review_and_refine":
+            # Update based on review feedback
+            aspects_improved = outcome.get("aspects_improved", 0)
+            score_increase = outcome.get("score_increase", 0)
+            
+            self.attention_patterns["context_awareness"] = min(1.0, aspects_improved / 3.0)
+            if score_increase > 0.5:
+                self.attention_patterns["relevant_focus"] += 0.1
+                
+        # Normalize attention values
+        for key in self.attention_patterns:
+            self.attention_patterns[key] = max(0.0, min(1.0, self.attention_patterns[key]))
 
     @classmethod
     def from_json(cls, data: Dict[str, Any]) -> 'MCTSState':
