@@ -142,6 +142,8 @@ IDEATION_GENERATE_PROMPT = """Act as an experienced HCI researcher specializing 
 Given the following research topic:
 {research_topic}
 
+{context_section}
+
 Your task is to generate **one** novel and significant research idea. Present the idea as a structured JSON object with the following fields:
 
 {{
@@ -171,6 +173,8 @@ INITIAL RESEARCH GOAL:
 
 CURRENT RESEARCH IDEA (which we want to change):
 {current_idea}
+
+{context_section}
 
 Your task is to develop an entirely different approach to address the core research goal. Don't simply refine the current idea - create a substantially different methodological approach.
 
@@ -446,4 +450,25 @@ Return your review in a JSON format with the following structure:
 
 Be critical but fair in your assessment. Your review should focus on actionable feedback that could improve the research idea.
 Ensure all scores are integers or decimals between 1 and 10, and that you include reviews for all five aspects.
+"""
+
+IDEATION_REFINE_WITH_REVIEW_PROMPT = """
+Current Research Idea:
+{current_idea}
+
+Review Feedback:
+{review_feedback}
+
+Please refine the research idea by addressing the feedback points above.
+Focus on concrete improvements that address each piece of feedback while maintaining the core strengths of the idea.
+
+Provide your response in the following JSON format:
+{{
+    "title": "Improved Research Idea Title",
+    "proposed_method": "Detailed description of the refined methodology",
+    "experiment_plan": "Updated experimental design and evaluation plan",
+    "test_case_examples": "Specific test cases or examples to validate the approach"
+}}
+
+Ensure all feedback has been addressed and the idea is significantly improved.
 """

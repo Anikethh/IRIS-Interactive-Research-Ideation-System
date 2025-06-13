@@ -12,7 +12,9 @@ const highlightState = {
     highlights: [],
     lastContent: ""
 };
-
+let isAutoGenerating = false;
+let nodeSelectionQueue = []
+let autoGenerationStopped = false;
 let treeMode = false;
 let treeData = null;
 let current_root = null; // Initialize current_root
@@ -35,9 +37,15 @@ $(document).ready(function () {
     addScoreDisplayStyles();
     
     // Check if the MCTS auto module has a toggleAutoGenerate function and use it
+    const autoButton = $(".auto-generate");
+    autoButton.removeClass("active"); // Explicitly ensure it's not active
+    
+    // Check if MCTS auto module is available but don't activate it
     if (typeof window.toggleAutoGenerate === 'function') {
-        // Store a reference to the MCTS auto implementation
         toggleFromAutoGenerate = window.toggleAutoGenerate;
+        console.log("✅ MCTS auto-exploration module detected but not activated");
+    } else {
+        console.log("⚠️ Using basic auto-generation fallback");
     }
 });
 
@@ -437,84 +445,426 @@ $("#chat-input").keypress(function (e) {
     }
 });
 
-// Add this new function for handling auto-generate button toggle
-function toggleAutoGenerate() {
-    const autoButton = $(".auto-generate");
-    autoButton.toggleClass("active");
-    
-    // If the Auto button is active, remove active class from other buttons
-    if (autoButton.hasClass("active")) {
-        $(".top-bar button").not(autoButton).removeClass("active");
-        
-        // Get available actions from the research brief buttons
-        const availableActions = [
-            {
-                button: ".generate-review",
-                action: "judge"  // Maps to the review system action
-            },
-            {
-                button: ".retrieve-knowledge",
-                action: "retrieve_and_refine"
-            },
-            {
-                button: ".refresh-button",
-                action: "refresh_idea"
-            }
-        ];
+// Remove the first toggleAutoGenerate function (around lines 348-420)
+// Keep only the improved version and add the missing helper functions
 
-        // For now, randomly select one of the available actions
-        const randomAction = availableActions[Math.floor(Math.random() * availableActions.length)];
-        updateChat("🤖 " + "Taking action " + randomAction);
-        
-        // Simulate click on the selected button to trigger existing handlers
-        $(randomAction.button).click();
-
-        // Send the corresponding action to backend
-        $.ajax({
-            url: '/api/step',
-            type: 'POST',
-            contentType: 'application/json',
-            data: JSON.stringify({ action: randomAction.action }),
-            success: function (data) {
-                // Update the main idea if provided
-                if (data.idea) {
-                    const structuredIdea = parseAndFormatStructuredIdea(data.idea);
-                    $("#main-idea").html(formatMessage(structuredIdea));
-                }
-
-                // Update chat messages if provided
-                if (data.messages) {
-                    updateChat(data.messages);
-                }
-
-                if (data.average_score !== undefined) {
-                    updateScoreDisplay(data.average_score);
-                }
-                
-                // If auto mode is still active, schedule next action
-                if (autoButton.hasClass("active")) {
-                    setTimeout(toggleAutoGenerate, 5000); // 5 second delay between actions
-                }
-            },
-            error: function(xhr, status, error) {
-                const chatArea = $("#chat-box");
-                var errorDiv = $('<div></div>')
-                    .attr('data-sender', 'system')
-                    .text('Error: ' + (xhr.responseJSON?.error || error))
-                    .hide();
-                chatArea.append(errorDiv);
-                errorDiv.slideDown();
-                chatArea.scrollTop(chatArea[0].scrollHeight);
-                
-                // Stop auto mode on error
-                autoButton.removeClass("active");
-            }
-        });
+// Add helper functions before toggleAutoGenerate
+function triggerRetrieveKnowledge() {
+    const retrieveBtn = document.querySelector(".retrieve-knowledge");
+    if (retrieveBtn) {
+        retrieveBtn.click();
+        return true;
     }
-    
-    // Prevent the click from triggering other handlers
     return false;
 }
+
+function triggerRefreshIdea() {
+    const refreshBtn = document.querySelector(".refresh-button");  
+    if (refreshBtn) {
+        refreshBtn.click();
+        return true;
+    }
+    return false;
+}
+
+// Replace the first toggleAutoGenerate function with this improved version:
+// Update the toggleAutoGenerate function 
+
+function toggleAutoGenerate() {
+    const autoButton = $(".auto-generate");
+    
+    if (autoButton.hasClass("active")) {
+        // Stop auto-generation
+        autoButton.removeClass("active");
+        isAutoGenerating = false;
+        autoGenerationStopped = true;
+        
+        // Hide memory panel
+        hideMemoryPanel();
+        
+        // Add stop message
+        const chatArea = $("#chat-box");
+        const stopMessage = $('<div></div>')
+            .attr('data-sender', 'system')
+            .addClass('auto-stop-message')
+            .html('🛑 <strong>Auto-generation stopped</strong><br><small>You can now navigate the tree normally</small>')
+            .hide();
+        chatArea.append(stopMessage);
+        stopMessage.slideDown();
+        chatArea.animate({ scrollTop: chatArea[0].scrollHeight }, 'slow');
+        
+        // Force reload tree to ensure consistency
+        setTimeout(() => {
+            if (typeof loadTree === 'function') {
+                loadTree();
+            }
+        }, 1000);
+        
+        // Process any queued node selections
+        if (nodeSelectionQueue.length > 0) {
+            const queuedSelection = nodeSelectionQueue.shift();
+            nodeSelectionQueue = []; // Clear remaining queue
+            setTimeout(() => {
+                selectNode(queuedSelection);
+            }, 1500); // Wait for tree reload
+        }
+        
+    } else {
+        // Start auto-generation
+        autoButton.addClass("active");
+        $(".top-bar button").not(autoButton).removeClass("active");
+        
+        // Set flags
+        isAutoGenerating = true;
+        autoGenerationStopped = false;
+        nodeSelectionQueue = [];
+        
+        // Add memory panel
+        addMemoryPanel();
+        
+        // Enhanced system message for memory-aware exploration
+        const chatArea = $("#chat-box");
+        const actionMessage = $('<div></div>')
+            .attr('data-sender', 'system')
+            .addClass('memory-system-message')
+            .html('🧠 <strong>Starting intelligent MCTS exploration with memory...</strong><br><small>Tree navigation disabled during auto-generation</small>')
+            .hide();
+        chatArea.append(actionMessage);
+        actionMessage.slideDown();
+        chatArea.animate({ scrollTop: chatArea[0].scrollHeight }, 'slow');
+        
+        // Use backend's memory-aware UCT selection
+        executeAutoStep();
+    }
+    
+    return false;
+}
+
+// Separate function to execute auto steps
+function executeAutoStep() {
+    const autoButton = $(".auto-generate");
+    
+    // Check if auto mode is still active and not stopped
+    if (!autoButton.hasClass("active") || autoGenerationStopped || !isAutoGenerating) {
+        console.log("Auto-generation stopped, exiting executeAutoStep");
+        isAutoGenerating = false;
+        return;
+    }
+    
+    const chatArea = $("#chat-box");
+    
+    $.ajax({
+        url: '/api/step',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ 
+            action: "generate",
+            use_memory: true,
+            auto_mode: true  // Flag to indicate this is from auto-generation
+        }),
+        success: function (data) {
+            console.log("Auto step response:", data);
+            
+            // Check again if auto-generation was stopped during the request
+            if (!autoButton.hasClass("active") || autoGenerationStopped || !isAutoGenerating) {
+                console.log("Auto-generation was stopped during request, not processing response");
+                return;
+            }
+            
+            // Update the main idea if provided
+            if (data.idea) {
+                const structuredIdea = parseAndFormatStructuredIdea(data.idea);
+                $("#main-idea").html(formatMessage(structuredIdea));
+                main_idea = data.idea;
+            }
+
+            // Update chat messages with memory insights
+            if (data.messages && Array.isArray(data.messages)) {
+                data.messages.forEach(msg => {
+                    if (msg.role === 'system') {
+                        const msgDiv = $('<div></div>')
+                            .attr('data-sender', 'system')
+                            .text(msg.content)
+                            .hide();
+                        chatArea.append(msgDiv);
+                        msgDiv.slideDown();
+                    }
+                });
+            }
+
+            // Display memory insights if available
+            if (data.memory_insights) {
+                const insightDiv = $('<div></div>')
+                    .attr('data-sender', 'system')
+                    .addClass('memory-insight')
+                    .html(`💡 <strong>Memory Insight:</strong> ${data.memory_insights}`)
+                    .hide();
+                chatArea.append(insightDiv);
+                insightDiv.slideDown();
+            }
+
+            // Update score display
+            if (data.average_score !== undefined) {
+                console.log("Updating score to:", data.average_score);
+                updateScoreDisplay(data.average_score);
+                forceUpdateScoreDisplay(data.average_score);
+            }
+            
+            // Update memory visualization
+            updateMemoryVisualization();
+            
+            // Scroll chat to bottom
+            chatArea.animate({ scrollTop: chatArea[0].scrollHeight }, 'slow');
+            
+            // Schedule next action if auto mode is still active
+            if (autoButton.hasClass("active") && isAutoGenerating && !autoGenerationStopped) {
+                setTimeout(executeAutoStep, 6000); // 6 second delay between actions
+            } else {
+                // Auto-generation was stopped, clean up
+                isAutoGenerating = false;
+                console.log("Auto-generation cycle completed or stopped");
+            }
+        },
+        error: function(xhr, status, error) {
+            console.error("Auto step error:", error);
+            var errorDiv = $('<div></div>')
+                .attr('data-sender', 'system')
+                .text('Error: ' + (xhr.responseJSON?.error || error))
+                .hide();
+            chatArea.append(errorDiv);
+            errorDiv.slideDown();
+            chatArea.scrollTop(chatArea[0].scrollHeight);
+            
+            // Stop auto mode on error
+            autoButton.removeClass("active");
+            isAutoGenerating = false;
+            autoGenerationStopped = true;
+            hideMemoryPanel();
+        }
+    });
+}
+
+// Add memory visualization functions
+function addMemoryPanel() {
+    if ($("#memory-panel").length > 0) return; // Already exists
+    
+    const memoryPanel = $(`
+        <div id="memory-panel" class="memory-panel">
+            <div class="memory-header">
+                <h3>🧠 Memory & Attention</h3>
+                <button class="memory-close" onclick="hideMemoryPanel()">×</button>
+            </div>
+            <div class="memory-content">
+                <div class="memory-stats">
+                    <div class="stat">
+                        <label>Trajectory Length:</label>
+                        <span id="trajectory-length">0</span>
+                    </div>
+                    <div class="stat">
+                        <label>Performance Trend:</label>
+                        <span id="performance-trend">stable</span>
+                    </div>
+                    <div class="stat">
+                        <label>Exploration Depth:</label>
+                        <span id="exploration-depth">0</span>
+                    </div>
+                </div>
+                
+                <div class="attention-patterns">
+                    <h4>Attention Focus</h4>
+                    <div class="attention-bars">
+                        <div class="attention-bar">
+                            <label>Relevant Focus:</label>
+                            <div class="bar-container">
+                                <div class="bar relevant-focus" style="width: 50%"></div>
+                            </div>
+                            <span class="bar-value">50%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `);
+    
+    $("body").append(memoryPanel);
+    memoryPanel.hide().slideDown();
+}
+
+function hideMemoryPanel() {
+    $("#memory-panel").slideUp(function() {
+        $(this).remove();
+    });
+}
+
+function updateMemoryVisualization() {
+    if ($("#memory-panel").length === 0) return;
+    
+    // Fetch memory state and insights
+    Promise.all([
+        fetch('/api/memory_state').then(r => r.json()),
+        fetch('/api/memory_insights').then(r => r.json())
+    ]).then(([memoryData, insights]) => {
+        
+        // Update basic stats
+        $("#trajectory-length").text(memoryData.trajectory_length || 0);
+        $("#exploration-depth").text(memoryData.current_depth || 0);
+        
+        // Update performance trend
+        const trendElement = $("#performance-trend");
+        const trend = insights.performance_trends?.trend || "stable";
+        trendElement.text(trend).removeClass().addClass(`trend-${trend}`);
+        
+        // Update attention patterns
+        const attentionPatterns = memoryData.attention_patterns || {};
+        
+        updateAttentionBar("relevant-focus", attentionPatterns.relevant_focus || 0.5);
+        updateAttentionBar("context-awareness", attentionPatterns.context_awareness || 0.4);
+        updateAttentionBar("noise-reduction", attentionPatterns.noise_reduction || 0.3);
+        
+        // Update action distribution chart
+        updateActionChart(memoryData.action_distribution || {});
+        
+        // Update performance trend chart
+        updatePerformanceTrendChart(memoryData.score_trend || []);
+        
+    }).catch(error => {
+        console.error('Error updating memory visualization:', error);
+    });
+}
+
+function updateAttentionBar(className, value) {
+    const percentage = Math.round(value * 100);
+    $(`.${className}`).css('width', `${percentage}%`);
+    $(`.${className}`).closest('.attention-bar').find('.bar-value').text(`${percentage}%`);
+}
+
+function updateActionChart(actionDistribution) {
+    const chartContainer = $("#action-chart");
+    chartContainer.empty();
+    
+    const total = Object.values(actionDistribution).reduce((sum, count) => sum + count, 0);
+    
+    Object.entries(actionDistribution).forEach(([action, count]) => {
+        const percentage = total > 0 ? Math.round((count / total) * 100) : 0;
+        const actionBar = $(`
+            <div class="action-bar-item">
+                <span class="action-name">${action.replace(/_/g, ' ')}</span>
+                <div class="action-bar-container">
+                    <div class="action-bar" style="width: ${percentage}%"></div>
+                </div>
+                <span class="action-count">${count}</span>
+            </div>
+        `);
+        chartContainer.append(actionBar);
+    });
+}
+
+function updatePerformanceTrendChart(scores) {
+    const canvas = document.getElementById('performance-trend-chart');
+    if (!canvas || scores.length < 2) return;
+    
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Simple line chart
+    ctx.strokeStyle = '#4CAF50';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    
+    for (let i = 0; i < scores.length; i++) {
+        const x = (i / (scores.length - 1)) * canvas.width;
+        const y = canvas.height - (scores[i] / 10) * canvas.height;
+        
+        if (i === 0) {
+            ctx.moveTo(x, y);
+        } else {
+            ctx.lineTo(x, y);
+        }
+    }
+    ctx.stroke();
+}
+
+// Remove the duplicate helper functions at the bottom of the file (triggerRetrieveKnowledge and triggerRefreshIdea)
+// ...existing code...
+
+// // Add this new function for handling auto-generate button toggle
+// function toggleAutoGenerate() {
+//     const autoButton = $(".auto-generate");
+//     autoButton.toggleClass("active");
+    
+//     // If the Auto button is active, remove active class from other buttons
+//     if (autoButton.hasClass("active")) {
+//         $(".top-bar button").not(autoButton).removeClass("active");
+        
+//         // Get available actions from the research brief buttons
+//         const availableActions = [
+//             {
+//                 button: ".generate-review",
+//                 action: "judge"  // Maps to the review system action
+//             },
+//             {
+//                 button: ".retrieve-knowledge",
+//                 action: "retrieve_and_refine"
+//             },
+//             {
+//                 button: ".refresh-button",
+//                 action: "refresh_idea"
+//             }
+//         ];
+
+//         // For now, randomly select one of the available actions
+//         const randomAction = availableActions[Math.floor(Math.random() * availableActions.length)];
+//         updateChat("🤖 " + "Taking action " + randomAction);
+        
+//         // Simulate click on the selected button to trigger existing handlers
+//         $(randomAction.button).click();
+
+//         // Send the corresponding action to backend
+//         $.ajax({
+//             url: '/api/step',
+//             type: 'POST',
+//             contentType: 'application/json',
+//             data: JSON.stringify({ action: randomAction.action }),
+//             success: function (data) {
+//                 // Update the main idea if provided
+//                 if (data.idea) {
+//                     const structuredIdea = parseAndFormatStructuredIdea(data.idea);
+//                     $("#main-idea").html(formatMessage(structuredIdea));
+//                 }
+
+//                 // Update chat messages if provided
+//                 if (data.messages) {
+//                     updateChat(data.messages);
+//                 }
+
+//                 if (data.average_score !== undefined) {
+//                     updateScoreDisplay(data.average_score);
+//                 }
+                
+//                 // If auto mode is still active, schedule next action
+//                 if (autoButton.hasClass("active")) {
+//                     setTimeout(toggleAutoGenerate, 5000); // 5 second delay between actions
+//                 }
+//             },
+//             error: function(xhr, status, error) {
+//                 const chatArea = $("#chat-box");
+//                 var errorDiv = $('<div></div>')
+//                     .attr('data-sender', 'system')
+//                     .text('Error: ' + (xhr.responseJSON?.error || error))
+//                     .hide();
+//                 chatArea.append(errorDiv);
+//                 errorDiv.slideDown();
+//                 chatArea.scrollTop(chatArea[0].scrollHeight);
+                
+//                 // Stop auto mode on error
+//                 autoButton.removeClass("active");
+//             }
+//         });
+//     }
+    
+//     // Prevent the click from triggering other handlers
+//     return false;
+// }
 
 function stepAction(action) {
     // Get chat area for message display
@@ -639,33 +989,48 @@ function loadTree() {
     });
 }
 
-// Transform API tree data into D3-friendly format
+// Update the transformTreeData function
+
 function transformTreeData(apiData) {
     function processNode(node) {
         // Check if this is a research goal node (special handling)
         const isResearchGoal = node.action === "research_goal" || 
                               (node.state && node.state.isResearchGoal === true);
         
+        // FIXED: Ensure we have a proper ID
+        const nodeId = node.id || node.nodeId || `node-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        
+        console.log("Processing node:", { 
+            originalNode: node, 
+            nodeId, 
+            isResearchGoal 
+        });
+        
         return {
-            name: isResearchGoal ? "research_goal" : node.action,
-            id: node.id,
+            name: isResearchGoal ? "research_goal" : (node.action || "unknown"),
+            id: nodeId, // FIXED: Make sure ID is properly set at the top level
             nodeData: {
-                idea: node.state?.current_idea || node.idea,
-                reward: node.reward || node.state?.reward,
-                depth: node.depth || node.state?.depth,
+                id: nodeId, // FIXED: Also set in nodeData for easy access
+                idea: node.state?.current_idea || node.idea || "",
+                reward: node.reward || node.state?.reward || 0,
+                depth: node.depth || node.state?.depth || 0,
                 hasReviews: node.state?.hasReviews || false,
                 hasRetrieval: node.state?.hasRetrieval || false,
                 hasFeedback: node.state?.hasFeedback || false,
                 isCurrentNode: node.isCurrentNode || false,
-                reviews: node.reviews,
-                isResearchGoal: isResearchGoal
+                reviews: node.reviews || {},
+                isResearchGoal: isResearchGoal,
+                average_score: node.state?.average_score || 0
             },
             children: node.children ? node.children.map(processNode) : []
         };
     }
     
-    return processNode(apiData);
+    const transformedData = processNode(apiData);
+    console.log("Transformed tree data:", transformedData);
+    return transformedData;
 }
+
 
 function createTree(data) {
     // Clear previous tree
@@ -687,6 +1052,7 @@ function createTree(data) {
     root.descendants().forEach(d => {
         d.x = d.x - rootX + width / 2;
     });
+    
     // Add links with curved paths
     svg.selectAll(".link")
         .data(root.links())
@@ -695,33 +1061,76 @@ function createTree(data) {
         .attr("d", d3.linkVertical()
             .x(d => d.x)
             .y(d => d.y));
-    // Add nodes group
+    
+    // Add nodes group with auto-generation state awareness
     const nodes = svg.selectAll(".node")
         .data(root.descendants())
         .join("g")
-        .attr("class", d => `node ${d.data.nodeData.isCurrentNode ? "current" : ""} ${d.data.nodeData.isResearchGoal ? "research-goal" : ""}`)
+        .attr("class", d => {
+            let classes = `node ${d.data.nodeData.isCurrentNode ? "current" : ""} ${d.data.nodeData.isResearchGoal ? "research-goal" : ""}`;
+            if (isAutoGenerating && !autoGenerationStopped) {
+                classes += " auto-generating";
+            }
+            return classes;
+        })
         .attr("transform", d => `translate(${d.x},${d.y})`)
         .on("click", function(event, d) {
+            console.log("Tree node clicked:", {
+                event,
+                nodeData: d.data,
+                nodeId: d.data.id,
+                nodeDataId: d.data.nodeData?.id,
+                isAutoGenerating,
+                autoGenerationStopped
+            });
+            
+            // Prevent event bubbling
+            event.stopPropagation();
+            
+            // Call selectNode with the D3 data object
             selectNode(d);
+        })
+        .style("cursor", d => {
+            if (isAutoGenerating && !autoGenerationStopped) {
+                return "not-allowed";
+            }
+            return "pointer";
+        })
+        .style("opacity", d => {
+            if (isAutoGenerating && !autoGenerationStopped) {
+                return 0.6;
+            }
+            return 1;
         });
+
     // Add node circles with colors based on action type
     nodes.append("circle")
-        .attr("r", d => d.data.nodeData.isResearchGoal ? 12 : 8)  // Larger circle for research goal
+        .attr("r", d => d.data.nodeData.isResearchGoal ? 12 : 8)
         .attr("fill", d => {
-            // Special color for research goal node
-            if (d.data.nodeData.isResearchGoal) return "#3b82f6";  // Blue for research goal
-            
-            // Color nodes based on action type
+            if (d.data.nodeData.isResearchGoal) return "#3b82f6";
             if (d.data.name === "root") return "#ffffff";
-            if (d.data.name === "generate") return "#4ade80"; // green
-            if (d.data.name === "reflect_and_reframe") return "#a78bfa"; // purple
-            if (d.data.name === "review_and_refine") return "#fb923c"; // orange
-            if (d.data.name === "retrieve_and_refine") return "#fbbf24"; // yellow
-            if (d.data.name === "first_idea") return "#4ade80"; // green for first idea
-            return "#3b82f6"; // default blue
+            if (d.data.name === "generate") return "#4ade80";
+            if (d.data.name === "reflect_and_reframe") return "#a78bfa";
+            if (d.data.name === "review_and_refine") return "#fb923c";
+            if (d.data.name === "retrieve_and_refine") return "#fbbf24";
+            if (d.data.name === "first_idea") return "#4ade80";
+            if (d.data.name === "refresh_idea") return "#10b981";
+            return "#3b82f6";
         })
         .attr("stroke", d => d.data.nodeData.isResearchGoal ? "#2563eb" : "#3b82f6")
-        .attr("stroke-width", d => d.data.nodeData.isResearchGoal ? 3 : 2.5);
+        .attr("stroke-width", d => d.data.nodeData.isResearchGoal ? 3 : 2.5)
+        .attr("stroke-dasharray", d => {
+            if (isAutoGenerating && !autoGenerationStopped) {
+                return "3,3";
+            }
+            return "none";
+        });
+    
+    // Add animation for auto-generation state
+    if (isAutoGenerating && !autoGenerationStopped) {
+        nodes.selectAll("circle")
+            .style("animation", "pulse 2s infinite");
+    }
 
     // Add indicators for nodes with reviews, retrieval or feedback
     const indicatorRadius = 3;
@@ -768,20 +1177,18 @@ function createTree(data) {
                 .attr("stroke-width", 1);
         }
     });
-    // Add text labels showing action type
+    
+    // Add text labels
     nodes.append("text")
         .attr("dy", "25")
         .attr("y", 5) 
         .attr("text-anchor", "middle")
         .text(d => {
             const action = d.data.name;
-            
-            // Special label for research goal
             if (d.data.nodeData.isResearchGoal || action === "research_goal") {
                 return "Research Goal";
             }
             
-            // Shorten action names for display
             if (action === "root") return "Root";
             if (action === "generate") return "Gen";
             if (action === "first_idea") return "First Idea";
@@ -792,7 +1199,6 @@ function createTree(data) {
             return action;
         })
         .each(function(d) {
-            // Add background rectangle for text
             const bbox = this.getBBox();
             const padding = 2;
             
@@ -816,60 +1222,171 @@ function createTree(data) {
         .attr("stroke-width", 2)
         .attr("stroke-dasharray", "3,3")
         .attr("class", "current-indicator");
-        
-    // Add CSS for research goal node
-    const style = document.createElement('style');
-    if (!document.getElementById('research-goal-style')) {
-        style.id = 'research-goal-style';
-        style.textContent = `
-            .node.research-goal text {
-                font-weight: bold;
-                font-size: 1.1em;
-            }
-        `;
-        document.head.appendChild(style);
-    }
 }
 
+// Update the selectNode function around line 1128
+
 function selectNode(d) {
-    // Node data is in d.data.nodeData from D3 hierarchy
+    // Check if auto-generation is running
+    if (isAutoGenerating && !autoGenerationStopped) {
+        console.log("Auto-generation is running, queuing node selection");
+        
+        // Show user feedback
+        const chatArea = $("#chat-box");
+        const warningMessage = $('<div></div>')
+            .attr('data-sender', 'system')
+            .addClass('auto-generation-warning')
+            .html('⚠️ <strong>Auto-generation in progress</strong><br><small>Please stop auto-generation first to navigate the tree</small>')
+            .hide();
+        chatArea.append(warningMessage);
+        warningMessage.slideDown();
+        
+        // Queue the selection for later
+        nodeSelectionQueue = [d]; // Replace any previous queued selection
+        
+        // Auto-remove warning after 3 seconds
+        setTimeout(() => {
+            warningMessage.slideUp(function() {
+                $(this).remove();
+            });
+        }, 3000);
+        
+        return;
+    }
+    
+    // Extract nodeId from the correct location in D3 data structure
     const nodeData = d.data;
-    const nodeId = nodeData.id;
+    const nodeId = nodeData.id || nodeData.nodeData?.id;
+    
+    // Debug logging
+    console.log("Selecting node:", { 
+        fullData: d,
+        nodeData, 
+        nodeId,
+        nodeDataObject: nodeData.nodeData,
+        isAutoGenerating,
+        autoGenerationStopped
+    });
+    
+    // Validate nodeId before sending request
+    if (!nodeId) {
+        console.error("No nodeId found in node data:", nodeData);
+        
+        // Show error in chat instead of alert
+        const chatArea = $("#chat-box");
+        const errorDiv = $('<div></div>')
+            .attr('data-sender', 'system')
+            .addClass('error-message')
+            .html('❌ <strong>Error:</strong> No node ID found. Please refresh the tree.')
+            .hide();
+        chatArea.append(errorDiv);
+        errorDiv.slideDown();
+        chatArea.animate({ scrollTop: chatArea[0].scrollHeight }, 'slow');
+        return;
+    }
+    
+    // Add loading indicator for node selection
+    const chatArea = $("#chat-box");
+    const loadingMessage = $('<div></div>')
+        .attr('data-sender', 'system')
+        .html('🔄 <strong>Navigating to selected node...</strong>')
+        .hide();
+    chatArea.append(loadingMessage);
+    loadingMessage.slideDown();
     
     // Send request to backend to select this node
     $.ajax({
         url: "/api/node",
         type: "POST",
         contentType: "application/json",
-        data: JSON.stringify({ node_id: nodeId }),
+        data: JSON.stringify({ 
+            node_id: nodeId,
+            force_sync: autoGenerationStopped  // Force sync if auto-generation was recently stopped
+        }),
         success: function(response) {
+            console.log("Node selection response:", response);
+            
+            // Remove loading message
+            loadingMessage.remove();
+            
             // Update UI to reflect selected node
-            // Parse and format any JSON structure in the idea
             if (response.idea) {
                 const structuredIdea = parseAndFormatStructuredIdea(response.idea);
-                $("#main-idea").html(marked.parse(structuredIdea));
+                $("#main-idea").html(formatMessage(structuredIdea));
+                main_idea = response.idea; // Update global variable
+            }
+            
+            // Update score display if available
+            if (response.average_score !== undefined) {
+                updateScoreDisplay(response.average_score);
+            }
+            
+            // Update review display if available
+            if (response.review_scores) {
+                updateReview({
+                    review_scores: response.review_scores,
+                    average_score: response.average_score
+                });
             }
             
             // Reload tree to update visualization
             loadTree();
             
             // Add history entry
-            const action = nodeData.name || "Unknown";
+            const action = nodeData.name || nodeData.nodeData?.name || "Unknown";
             $("#history-log").append(
                 `<div class="history-item">Selected ${action} node (ID: ${nodeId})</div>`
             );
             
             // Scroll history to bottom
             const historyLog = document.getElementById("history-log");
-            historyLog.scrollTop = historyLog.scrollHeight;
+            if (historyLog) {
+                historyLog.scrollTop = historyLog.scrollHeight;
+            }
+            
+            // Add system message to chat
+            // const systemMessage = $('<div></div>')
+            //     .attr('data-sender', 'system')
+            //     //.html(`✅ <strong>Navigated to ${action} node</strong>`)
+            //     .hide();
+            // chatArea.append(systemMessage);
+            // systemMessage.slideDown();
+            // chatArea.animate({ scrollTop: chatArea[0].scrollHeight }, 'slow');
+            
+            // Reset auto-generation stopped flag after successful navigation
+            autoGenerationStopped = false;
         },
-        error: function(error) {
-            console.error("Error selecting node:", error);
-            alert("Error selecting node: " + (error.responseJSON?.error || "Unknown error"));
+        error: function(xhr, status, error) {
+            console.error("Error selecting node:", {
+                status,
+                error,
+                response: xhr.responseText,
+                nodeId,
+                nodeData
+            });
+            
+            // Remove loading message
+            loadingMessage.remove();
+            
+            let errorMessage = "Unknown error";
+            if (xhr.responseJSON && xhr.responseJSON.error) {
+                errorMessage = xhr.responseJSON.error;
+            } else if (xhr.responseText) {
+                errorMessage = xhr.responseText;
+            }
+            
+            // Show error in chat instead of alert
+            const errorDiv = $('<div></div>')
+                .attr('data-sender', 'system')
+                .addClass('error-message')
+                .html(`❌ <strong>Error selecting node:</strong> ${errorMessage}<br><small>Try refreshing the tree or restarting the application</small>`)
+                .hide();
+            chatArea.append(errorDiv);
+            errorDiv.slideDown();
+            chatArea.animate({ scrollTop: chatArea[0].scrollHeight }, 'slow');
         }
     });
 }
-
 // Add refresh button handler for refreshing ideas with proper feedback
 $(".refresh-button").click(function() {
     refreshResearchIdea();
@@ -1739,17 +2256,26 @@ function loadIdea(isInitialLoad = false) {
 
 // Add to existing event listeners
 document.addEventListener('DOMContentLoaded', function() {
-    // ...existing initialization code...
-    
-    // Initialize MCTS automation button state
-    const autoGenBtn = document.querySelector('.auto-generate');
-    if (autoGenBtn) {
-        autoGenBtn.addEventListener('click', function(e) {
-            e.preventDefault();
+    // ...any other initialization code...
+
+    // Use event delegation instead of direct binding
+    document.addEventListener('click', function(e) {
+        const autoGenBtn = e.target.closest('.auto-generate');
+        if (!autoGenBtn) return;
+
+        e.preventDefault();
+        console.log("✅ Auto-generate button clicked");
+
+        if (typeof toggleAutoGenerate === 'function') {
             toggleAutoGenerate();
-        });
-    }
+        } else if (typeof toggleFromAutoGenerate === 'function') {
+            toggleFromAutoGenerate();
+        } else {
+            console.warn('⚠️ toggleAutoGenerate is not defined');
+        }
+    });
 });
+
 
 // Add these functions to handle state updates
 function updateScore(score) {
@@ -1934,7 +2460,28 @@ function triggerRetrieveKnowledge() {
         retrieveBtn.click();
         return true;
     }
-    return false;
+    // Fallback: Make direct API call
+    $.ajax({
+        url: '/api/generate_query',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ idea: main_idea }),
+        success: function(data) {
+            if (data.query) {
+                // Now retrieve knowledge with the generated query
+                $.ajax({
+                    url: '/api/retrieve_knowledge', 
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({ query: data.query }),
+                    success: function(retrievalData) {
+                        console.log("Knowledge retrieved successfully");
+                    }
+                });
+            }
+        }
+    });
+    return true;
 }
 
 function triggerRefreshIdea() {
@@ -1944,90 +2491,119 @@ function triggerRefreshIdea() {
         refreshBtn.click();
         return true;
     }
-    return false;
+    // Fallback: Make direct API call
+    $.ajax({
+        url: '/api/refresh_idea',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ idea: main_idea }),
+        success: function(data) {
+            if (data.idea) {
+                const structuredIdea = parseAndFormatStructuredIdea(data.idea);
+                $("#main-idea").html(formatMessage(structuredIdea));
+                main_idea = data.idea;
+            }
+        }
+    });
+    return true;
 }
 
-// Update toggleAutoGenerate to use the trigger functions
-function toggleAutoGenerate() {
-    const autoButton = $(".auto-generate");
-    autoButton.toggleClass("active");
-    
-    // If the Auto button is active, remove active class from other buttons
-    if (autoButton.hasClass("active")) {
-        $(".top-bar button").not(autoButton).removeClass("active");
-        
-        // Get available actions with their trigger functions
-        const availableActions = [
-            {
-                button: ".generate-review",
-                action: "judge",
-                trigger: () => window.triggerGenerateReview()
-            },
-            {
-                button: ".retrieve-knowledge", 
-                action: "retrieve_and_refine",
-                trigger: triggerRetrieveKnowledge
-            },
-            {
-                button: ".refresh-button",
-                action: "refresh_idea", 
-                trigger: triggerRefreshIdea
-            }
-        ];
-
-        // For now, randomly select one action
-        const randomAction = availableActions[Math.floor(Math.random() * availableActions.length)];
-        updateChat("🤖 " + "Taking action " + randomAction);
-        
-        // Call the appropriate trigger function
-        if (randomAction.trigger()) {
-            // Send the corresponding action to backend
-            $.ajax({
-                url: '/api/step',
-                type: 'POST',
-                contentType: 'application/json',
-                data: JSON.stringify({ action: randomAction.action }),
-                success: function (data) {
-                    // Update the main idea if provided
-                    if (data.idea) {
-                        const structuredIdea = parseAndFormatStructuredIdea(data.idea);
-                        $("#main-idea").html(formatMessage(structuredIdea));
-                    }
-
-                    // Update chat messages if provided
-                    if (data.messages) {
-                        updateChat(data.messages);
-                    }
-
-                    if (data.average_score !== undefined) {
-                        updateScoreDisplay(data.average_score);
-                    }
-                    
-                    // If auto mode is still active, schedule next action
-                    if (autoButton.hasClass("active")) {
-                        setTimeout(toggleAutoGenerate, 5000); // 5 second delay between actions
-                    }
-                },
-                error: function(xhr, status, error) {
-                    const chatArea = $("#chat-box");
-                    var errorDiv = $('<div></div>')
-                        .attr('data-sender', 'system')
-                        .text('Error: ' + (xhr.responseJSON?.error || error))
-                        .hide();
-                    chatArea.append(errorDiv);
-                    errorDiv.slideDown();
-                    chatArea.scrollTop(chatArea[0].scrollHeight);
-                    
-                    // Stop auto mode on error
-                    autoButton.removeClass("active");
-                }
-            });
-        }
+// Add a function to trigger review generation
+function triggerGenerateReview() {
+    const reviewBtn = document.querySelector(".generate-review");
+    if (reviewBtn) {
+        reviewBtn.click();
+        return true;
     }
     
-    // Prevent the click from triggering other handlers
-    return false;
+    // Fallback: Call stepAction directly
+    stepAction('judge');
+    return true;
 }
+
+// Make sure this function is available globally
+window.triggerGenerateReview = triggerGenerateReview;
+// // Update toggleAutoGenerate to use the trigger functions
+// function toggleAutoGenerate() {
+//     const autoButton = $(".auto-generate");
+//     autoButton.toggleClass("active");
+    
+//     // If the Auto button is active, remove active class from other buttons
+//     if (autoButton.hasClass("active")) {
+//         $(".top-bar button").not(autoButton).removeClass("active");
+        
+//         // Get available actions with their trigger functions
+//         const availableActions = [
+//             {
+//                 button: ".generate-review",
+//                 action: "judge",
+//                 trigger: () => window.triggerGenerateReview()
+//             },
+//             {
+//                 button: ".retrieve-knowledge", 
+//                 action: "retrieve_and_refine",
+//                 trigger: triggerRetrieveKnowledge
+//             },
+//             {
+//                 button: ".refresh-button",
+//                 action: "refresh_idea", 
+//                 trigger: triggerRefreshIdea
+//             }
+//         ];
+
+//         // For now, randomly select one action
+//         const randomAction = availableActions[Math.floor(Math.random() * availableActions.length)];
+//         updateChat("🤖 " + "Taking action " + randomAction);
+        
+//         // Call the appropriate trigger function
+//         if (randomAction.trigger()) {
+//             // Send the corresponding action to backend
+//             $.ajax({
+//                 url: '/api/step',
+//                 type: 'POST',
+//                 contentType: 'application/json',
+//                 data: JSON.stringify({ action: randomAction.action }),
+//                 success: function (data) {
+//                     // Update the main idea if provided
+//                     if (data.idea) {
+//                         const structuredIdea = parseAndFormatStructuredIdea(data.idea);
+//                         $("#main-idea").html(formatMessage(structuredIdea));
+//                     }
+
+//                     // Update chat messages if provided
+//                     if (data.messages) {
+//                         updateChat(data.messages);
+//                     }
+
+//                     if (data.average_score !== undefined) {
+//                         updateScoreDisplay(data.average_score);
+//                     }
+                    
+//                     // If auto mode is still active, schedule next action
+//                     if (autoButton.hasClass("active")) {
+//                         setTimeout(toggleAutoGenerate, 5000); // 5 second delay between actions
+//                     }
+//                 },
+//                 error: function(xhr, status, error) {
+//                     const chatArea = $("#chat-box");
+//                     var errorDiv = $('<div></div>')
+//                         .attr('data-sender', 'system')
+//                         .text('Error: ' + (xhr.responseJSON?.error || error))
+//                         .hide();
+//                     chatArea.append(errorDiv);
+//                     errorDiv.slideDown();
+//                     chatArea.scrollTop(chatArea[0].scrollHeight);
+                    
+//                     // Stop auto mode on error
+//                     autoButton.removeClass("active");
+//                 }
+//             });
+//         }
+//     }
+    
+//     // Prevent the click from triggering other handlers
+//     return false;
+// }
 
 // Add CSS for score display
 function addScoreDisplayStyles() {

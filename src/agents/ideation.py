@@ -17,6 +17,7 @@ from .prompts import (
     IDEATION_GENERATE_QUERY_PROMPT,
     IDEATION_IMPROVE_WITH_FEEDBACK_PROMPT,
     IDEATION_DIRECT_FEEDBACK_PROMPT,
+    IDEATION_REFINE_WITH_REVIEW_PROMPT
 )
 import litellm
 
@@ -352,15 +353,27 @@ class IdeationAgent(BaseAgent):
         """Get the appropriate prompt for the given action."""
         research_goal = state.get("research_goal", "")  # Get research_goal directly
         current_idea = state.get("current_idea", "")
+        abstract = state.get("abstract", "").strip()
+
+        if abstract:
+            context_section = f"""
+            Additionally, use the following abstract from the uploaded paper as context for your research:
+
+            {abstract}
+            Use this context to inform your research direction and ensure your idea builds upon or relates to the concepts mentioned in the abstract.
+            """
+        else:
+            context_section = ""
 
         if action == "generate":
-            return IDEATION_GENERATE_PROMPT.format(research_topic=research_goal or current_idea)
+            return IDEATION_GENERATE_PROMPT.format(research_topic=research_goal or current_idea, context_section=context_section)
         elif action == "generate_query":
             return IDEATION_GENERATE_QUERY_PROMPT.format(research_idea=current_idea)
         elif action == "refresh_idea":
             return IDEATION_REFRESH_APPROACH_PROMPT.format(
                 research_topic=research_goal,
-                current_idea=current_idea
+                current_idea=current_idea,
+                context_section=context_section
             )
         elif action == "refine_with_retrieval":
             # Handle both formats: direct retrieved_content parameter or context_chunks 
@@ -371,6 +384,38 @@ class IdeationAgent(BaseAgent):
             return IDEATION_REFINE_WITH_RETRIEVAL_PROMPT.format(
                 current_idea=current_idea, retrieved_content=retrieved_content
             )
+        elif action == "review_and_refine":
+            # Handle review-based refinement
+            reviews = state.get("reviews", [])
+            
+            # Format reviews into feedback string
+            if reviews:
+                feedback_parts = []
+                for review in reviews:
+                    aspect = review.get("aspect", "general")
+                    summary = review.get("summary", "")
+                    score = review.get("score", 0)
+                    suggestion = review.get("suggestion", "")
+                    
+                    feedback_item = f"**{aspect.title()}** (Score: {score}/10):\n"
+                    if summary:
+                        feedback_item += f"Issue: {summary}\n"
+                    if suggestion:
+                        feedback_item += f"Suggestion: {suggestion}\n"
+                    
+                    feedback_parts.append(feedback_item)
+                
+                review_feedback = "\n".join(feedback_parts)
+            else:
+                review_feedback = "Please improve the overall quality and clarity of the research idea."
+            
+            # Use the refine with review prompt
+            from .prompts import IDEATION_REFINE_WITH_REVIEW_PROMPT
+            return IDEATION_REFINE_WITH_REVIEW_PROMPT.format(
+                current_idea=current_idea, 
+                review_feedback=review_feedback
+            )
+
         elif action == "process_feedback":
             # Handle user feedback from chat
             user_feedback = state.get("user_feedback", "")
