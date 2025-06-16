@@ -142,8 +142,7 @@ IDEATION_GENERATE_PROMPT = """Act as an experienced HCI researcher specializing 
 Given the following research topic:
 {research_topic}
 
-and the following abstract from the uploaded paper for your context:
-{abstract}
+{abstract_section}
 
 Your task is to generate **one** novel and significant research idea. Present the idea as a structured JSON object with the following fields:
 
@@ -175,8 +174,7 @@ INITIAL RESEARCH GOAL:
 CURRENT RESEARCH IDEA (which we want to change):
 {current_idea}
 
-and the following abstract from the uploaded paper for your context:
-{abstract}
+{abstract_section}
 
 Your task is to develop an entirely different approach to address the core research goal. Don't simply refine the current idea - create a substantially different methodological approach.
 
@@ -209,6 +207,8 @@ IDEATION_REFINE_WITH_RETRIEVAL_PROMPT = """Refine the following research idea us
 
 ORIGINAL IDEA:
 {current_idea}
+
+{abstract_section}
 
 RELEVANT LITERATURE:
 {retrieved_content}

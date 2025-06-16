@@ -6,6 +6,16 @@ const state = {
     reviewInProgress: false
 };
 
+const MCTS_CONFIG = {
+    maxIterations: 5,
+    explorationDelay: 3000,
+    explorationConstant: 1.414,
+    discountFactor: 0.95
+};
+
+// Add iteration tracking variable
+let mctsIterationCount = 0;
+
 // Initialize highlight state and tree variables
 const highlightState = {
     rawIdea: "",
@@ -437,83 +447,219 @@ $("#chat-input").keypress(function (e) {
     }
 });
 
-// Add this new function for handling auto-generate button toggle
+//The function defined below uses the backend logic where the MCTS algorithm is implemented.
 function toggleAutoGenerate() {
-    const autoButton = $(".auto-generate");
-    autoButton.toggleClass("active");
+    const button = $(".auto-generate");
     
-    // If the Auto button is active, remove active class from other buttons
-    if (autoButton.hasClass("active")) {
-        $(".top-bar button").not(autoButton).removeClass("active");
+    if (button.hasClass("active")) {
+        // Stop auto-generation
+        button.removeClass("active");
+        clearTimeout(window.autoGenerateTimer);
+        window.autoGenerateTimer = null;
+        mctsIterationCount = 0; // Reset counter
         
-        // Get available actions from the research brief buttons
-        const availableActions = [
-            {
-                button: ".generate-review",
-                action: "judge"  // Maps to the review system action
-            },
-            {
-                button: ".retrieve-knowledge",
-                action: "retrieve_and_refine"
-            },
-            {
-                button: ".refresh-button",
-                action: "refresh_idea"
-            }
-        ];
+        // Add system message about stopping
+        const chatArea = $("#chat-box");
+        const stopMessage = $('<div></div>')
+            .attr('data-sender', 'system')
+            .text('🛑 MCTS exploration stopped.')
+            .hide();
+        chatArea.append(stopMessage);
+        stopMessage.slideDown();
+        chatArea.animate({ scrollTop: chatArea[0].scrollHeight }, 'slow');
 
-        // For now, randomly select one of the available actions
-        const randomAction = availableActions[Math.floor(Math.random() * availableActions.length)];
-        updateChat("🤖 " + "Taking action " + randomAction);
-        
-        // Simulate click on the selected button to trigger existing handlers
-        $(randomAction.button).click();
-
-        // Send the corresponding action to backend
+                // Make one final regular API call to trigger best child selection
         $.ajax({
             url: '/api/step',
             type: 'POST',
             contentType: 'application/json',
-            data: JSON.stringify({ action: randomAction.action }),
-            success: function (data) {
-                // Update the main idea if provided
+            data: JSON.stringify({ 
+                action: 'generate',  // Use existing action
+                use_mcts: false      // This will trigger the mcts_best_child logic
+            }),
+            success: function(data) {
+                console.log('Final best child result:', data);
+                
+                // Update with the best idea found
                 if (data.idea) {
-                    const structuredIdea = parseAndFormatStructuredIdea(data.idea);
-                    $("#main-idea").html(formatMessage(structuredIdea));
+                    const structuredIdea = parseAndFormatStructuredIdea ? 
+                        parseAndFormatStructuredIdea(data.idea) : data.idea;
+                    
+                    $("#main-idea").html(formatMessage ? formatMessage(structuredIdea) : structuredIdea);
+                    
+                    if (typeof window !== 'undefined') {
+                        window.main_idea = data.idea;
+                    }
+                    
+                    $("#brief-placeholder").hide();
+                    $("#main-idea").show();
                 }
-
-                // Update chat messages if provided
-                if (data.messages) {
-                    updateChat(data.messages);
-                }
-
-                if (data.average_score !== undefined) {
+                
+                // Update score display
+                if (data.average_score !== undefined && typeof updateScoreDisplay === 'function') {
                     updateScoreDisplay(data.average_score);
                 }
                 
-                // If auto mode is still active, schedule next action
-                if (autoButton.hasClass("active")) {
-                    setTimeout(toggleAutoGenerate, 5000); // 5 second delay between actions
+                // Show final result message
+                const finalMessage = $('<div></div>')
+                    .attr('data-sender', 'system')
+                    .text(`🏆 Best idea selected from ${mctsIterationCount} iterations.`)
+                    .hide();
+                chatArea.append(finalMessage);
+                finalMessage.slideDown();
+                chatArea.animate({ scrollTop: chatArea[0].scrollHeight }, 'slow');
+                
+                // Update tree visualization
+                if (typeof loadTree === 'function') {
+                    loadTree();
                 }
             },
             error: function(xhr, status, error) {
-                const chatArea = $("#chat-box");
-                var errorDiv = $('<div></div>')
+                console.error('Error getting best child:', error);
+                const errorMsg = $('<div></div>')
                     .attr('data-sender', 'system')
-                    .text('Error: ' + (xhr.responseJSON?.error || error))
+                    .text('❌ Error retrieving best result: ' + (xhr.responseJSON?.error || error))
                     .hide();
-                chatArea.append(errorDiv);
-                errorDiv.slideDown();
-                chatArea.scrollTop(chatArea[0].scrollHeight);
-                
-                // Stop auto mode on error
-                autoButton.removeClass("active");
+                chatArea.append(errorMsg);
+                errorMsg.slideDown();
+            },
+            complete: function() {
+                // Reset counter after everything is done
+                mctsIterationCount = 0;
             }
         });
-    }
+    } else {
+        // Check if we have an idea to work with
+        const mainIdea = $("#main-idea").text().trim();
+        if (!mainIdea || mainIdea.length === 0) {
+            alert("Please enter a research idea first before starting automated exploration.");
+            return;
+        }
+        
+        // Reset iteration counter and start auto-generation
+        mctsIterationCount = 0;
+        button.addClass("active");
+        
+        // Add system message about starting
+        const chatArea = $("#chat-box");
+        const startMessage = $('<div></div>')
+            .attr('data-sender', 'system')
+            .text(`🤖 Starting MCTS exploration (${MCTS_CONFIG.maxIterations} iterations)...`)
+            .hide();
+        chatArea.append(startMessage);
+        startMessage.slideDown();
+        chatArea.animate({ scrollTop: chatArea[0].scrollHeight }, 'slow');
+        
+        // Define recursive function for continuous exploration
+        function performMCTSStep() {
+            // Check iteration limit using hyperparameters
+            const shouldStop = !button.hasClass("active") || mctsIterationCount >= MCTS_CONFIG.maxIterations;
     
-    // Prevent the click from triggering other handlers
-    return false;
+            if (shouldStop) {
+                // Clear any pending timers
+                if (window.autoGenerateTimer) {
+                    clearTimeout(window.autoGenerateTimer);
+                    window.autoGenerateTimer = null;
+                }
+                
+                // Remove active class and show completion message
+                button.removeClass("active");
+                
+                if (mctsIterationCount >= MCTS_CONFIG.maxIterations) {
+                    const chatArea = $("#chat-box");
+                    const completionMessage = $('<div></div>')
+                        .attr('data-sender', 'system')
+                        .text(`✅ MCTS exploration completed after ${mctsIterationCount} iterations.`)
+                        .hide();
+                    chatArea.append(completionMessage);
+                    completionMessage.slideDown();
+                    chatArea.animate({ scrollTop: chatArea[0].scrollHeight }, 'slow');
+                }
+                
+                // Reset counter
+                mctsIterationCount = 0;
+                return;
+            }
+            
+            // Increment iteration counter
+            mctsIterationCount++;
+            
+            // Call the backend with the generate action and use_mcts flag
+            $.ajax({
+                url: '/api/step',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ 
+                    action: 'generate', 
+                    use_mcts: true,
+                    num_iterations: 1,
+                    iteration: mctsIterationCount,
+                    max_iterations: MCTS_CONFIG.maxIterations
+                }),
+                success: function(data) {
+                    console.log(`MCTS step ${mctsIterationCount}/${MCTS_CONFIG.maxIterations} response:`, data);
+                    
+                    // Update Research Brief panel
+                    if (data.idea) {
+                        const structuredIdea = parseAndFormatStructuredIdea ? 
+                            parseAndFormatStructuredIdea(data.idea) : data.idea;
+                        
+                        $("#main-idea").html(formatMessage ? formatMessage(structuredIdea) : structuredIdea);
+                        
+                        // Update global variable
+                        if (typeof window !== 'undefined') {
+                            window.main_idea = data.idea;
+                        }
+                        
+                        // Make sure Research Brief is visible
+                        $("#brief-placeholder").hide();
+                        $("#main-idea").show();
+                    }
+                    
+                    // Update score display
+                    if (data.average_score !== undefined && typeof updateScoreDisplay === 'function') {
+                        updateScoreDisplay(data.average_score);
+                    }
+                    
+                    // Update tree visualization if available
+                    if (typeof loadTree === 'function') {
+                        loadTree();
+                    }
+                    
+                    // Schedule next step using hyperparameter delay
+                    if (button.hasClass("active") && mctsIterationCount < MCTS_CONFIG.maxIterations) {
+                        window.autoGenerateTimer = setTimeout(performMCTSStep, MCTS_CONFIG.explorationDelay);
+                    } else {
+                    // Force stop if conditions not met
+                        performMCTSStep(); // This will trigger the stop logic
+}
+                },
+                error: function(xhr, status, error) {
+                    console.error('MCTS step error:', error);
+                    
+                    const chatArea = $("#chat-box");
+                    const errorMsg = $('<div></div>')
+                        .attr('data-sender', 'system')
+                        .text('❌ Error in MCTS exploration: ' + (xhr.responseJSON?.error || error))
+                        .hide();
+                    chatArea.append(errorMsg);
+                    errorMsg.slideDown();
+                    chatArea.animate({ scrollTop: chatArea[0].scrollHeight }, 'slow');
+                    
+                    // Stop auto-generation on error
+                    button.removeClass("active");
+                    mctsIterationCount = 0;
+                    if (window.autoGenerateTimer) {
+                        clearTimeout(window.autoGenerateTimer);
+                        window.autoGenerateTimer = null;
+                    }
+                }
+            });
+        }
+        
+        // Start the first MCTS step
+        performMCTSStep();
+    }
 }
 
 function stepAction(action) {
@@ -1947,87 +2093,87 @@ function triggerRefreshIdea() {
     return false;
 }
 
-// Update toggleAutoGenerate to use the trigger functions
-function toggleAutoGenerate() {
-    const autoButton = $(".auto-generate");
-    autoButton.toggleClass("active");
+// // Update toggleAutoGenerate to use the trigger functions
+// function toggleAutoGenerate() {
+//     const autoButton = $(".auto-generate");
+//     autoButton.toggleClass("active");
     
-    // If the Auto button is active, remove active class from other buttons
-    if (autoButton.hasClass("active")) {
-        $(".top-bar button").not(autoButton).removeClass("active");
+//     // If the Auto button is active, remove active class from other buttons
+//     if (autoButton.hasClass("active")) {
+//         $(".top-bar button").not(autoButton).removeClass("active");
         
-        // Get available actions with their trigger functions
-        const availableActions = [
-            {
-                button: ".generate-review",
-                action: "judge",
-                trigger: () => window.triggerGenerateReview()
-            },
-            {
-                button: ".retrieve-knowledge", 
-                action: "retrieve_and_refine",
-                trigger: triggerRetrieveKnowledge
-            },
-            {
-                button: ".refresh-button",
-                action: "refresh_idea", 
-                trigger: triggerRefreshIdea
-            }
-        ];
+//         // Get available actions with their trigger functions
+//         const availableActions = [
+//             {
+//                 button: ".generate-review",
+//                 action: "judge",
+//                 trigger: () => window.triggerGenerateReview()
+//             },
+//             {
+//                 button: ".retrieve-knowledge", 
+//                 action: "retrieve_and_refine",
+//                 trigger: triggerRetrieveKnowledge
+//             },
+//             {
+//                 button: ".refresh-button",
+//                 action: "refresh_idea", 
+//                 trigger: triggerRefreshIdea
+//             }
+//         ];
 
-        // For now, randomly select one action
-        const randomAction = availableActions[Math.floor(Math.random() * availableActions.length)];
-        updateChat("🤖 " + "Taking action " + randomAction);
+//         // For now, randomly select one action
+//         const randomAction = availableActions[Math.floor(Math.random() * availableActions.length)];
+//         updateChat("🤖 " + "Taking action " + randomAction);
         
-        // Call the appropriate trigger function
-        if (randomAction.trigger()) {
-            // Send the corresponding action to backend
-            $.ajax({
-                url: '/api/step',
-                type: 'POST',
-                contentType: 'application/json',
-                data: JSON.stringify({ action: randomAction.action }),
-                success: function (data) {
-                    // Update the main idea if provided
-                    if (data.idea) {
-                        const structuredIdea = parseAndFormatStructuredIdea(data.idea);
-                        $("#main-idea").html(formatMessage(structuredIdea));
-                    }
+//         // Call the appropriate trigger function
+//         if (randomAction.trigger()) {
+//             // Send the corresponding action to backend
+//             $.ajax({
+//                 url: '/api/step',
+//                 type: 'POST',
+//                 contentType: 'application/json',
+//                 data: JSON.stringify({ action: randomAction.action }),
+//                 success: function (data) {
+//                     // Update the main idea if provided
+//                     if (data.idea) {
+//                         const structuredIdea = parseAndFormatStructuredIdea(data.idea);
+//                         $("#main-idea").html(formatMessage(structuredIdea));
+//                     }
 
-                    // Update chat messages if provided
-                    if (data.messages) {
-                        updateChat(data.messages);
-                    }
+//                     // Update chat messages if provided
+//                     if (data.messages) {
+//                         updateChat(data.messages);
+//                     }
 
-                    if (data.average_score !== undefined) {
-                        updateScoreDisplay(data.average_score);
-                    }
+//                     if (data.average_score !== undefined) {
+//                         updateScoreDisplay(data.average_score);
+//                     }
                     
-                    // If auto mode is still active, schedule next action
-                    if (autoButton.hasClass("active")) {
-                        setTimeout(toggleAutoGenerate, 5000); // 5 second delay between actions
-                    }
-                },
-                error: function(xhr, status, error) {
-                    const chatArea = $("#chat-box");
-                    var errorDiv = $('<div></div>')
-                        .attr('data-sender', 'system')
-                        .text('Error: ' + (xhr.responseJSON?.error || error))
-                        .hide();
-                    chatArea.append(errorDiv);
-                    errorDiv.slideDown();
-                    chatArea.scrollTop(chatArea[0].scrollHeight);
+//                     // If auto mode is still active, schedule next action
+//                     if (autoButton.hasClass("active")) {
+//                         setTimeout(toggleAutoGenerate, 5000); // 5 second delay between actions
+//                     }
+//                 },
+//                 error: function(xhr, status, error) {
+//                     const chatArea = $("#chat-box");
+//                     var errorDiv = $('<div></div>')
+//                         .attr('data-sender', 'system')
+//                         .text('Error: ' + (xhr.responseJSON?.error || error))
+//                         .hide();
+//                     chatArea.append(errorDiv);
+//                     errorDiv.slideDown();
+//                     chatArea.scrollTop(chatArea[0].scrollHeight);
                     
-                    // Stop auto mode on error
-                    autoButton.removeClass("active");
-                }
-            });
-        }
-    }
+//                     // Stop auto mode on error
+//                     autoButton.removeClass("active");
+//                 }
+//             });
+//         }
+//     }
     
-    // Prevent the click from triggering other handlers
-    return false;
-}
+//     // Prevent the click from triggering other handlers
+//     return false;
+// }
 
 // Add CSS for score display
 function addScoreDisplayStyles() {
@@ -2082,3 +2228,5 @@ function updateReview(data) {
         console.log("Review feedback received");
     }
 }
+
+window.toggleAutoGenerate = toggleAutoGenerate;

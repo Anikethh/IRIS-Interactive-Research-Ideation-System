@@ -355,23 +355,69 @@ class IdeationAgent(BaseAgent):
         abstract = state.get("abstract", "")
 
         if action == "generate":
-            return IDEATION_GENERATE_PROMPT.format(research_topic=research_goal or current_idea, abstract=abstract)
+            return IDEATION_GENERATE_PROMPT.format(research_topic=research_goal or current_idea, abstract_section=abstract_section)
         elif action == "generate_query":
             return IDEATION_GENERATE_QUERY_PROMPT.format(research_idea=current_idea)
         elif action == "refresh_idea":
             return IDEATION_REFRESH_APPROACH_PROMPT.format(
                 research_topic=research_goal,
                 current_idea=current_idea,
-                abstract=abstract
+                abstract_section=abstract_section
             )
-        elif action == "refine_with_retrieval":
+        elif action == "review_and_refine":
+            # Handle review feedback from state
+            accepted_reviews = state.get("review_feedback", [])
+            original_raw_output = state.get("original_raw_output")
+            
+            # Format the accepted reviews into a structured feedback string
+            review_feedback = []
+            for review in accepted_reviews:
+                aspect = review.get('aspect', 'general')
+                summary = review.get('summary', '')
+                score = review.get('score', 0)
+                highlight = review.get('highlight', {})
+                
+                feedback_item = f"Aspect: {aspect.capitalize()} (Score: {score}/10)\n"
+                feedback_item += f"Summary: {summary}\n"
+                
+                if highlight:
+                    feedback_item += f"Highlighted text: \"{highlight.get('text', '')}\"\n"
+                    feedback_item += f"Specific feedback: {highlight.get('review', '')}\n"
+                
+                review_feedback.append(feedback_item)
+            
+            # Join all feedback into a single string
+            formatted_feedback = "\n".join(review_feedback)
+            
+            # Determine which version of the idea to use
+            idea_to_improve = original_raw_output if original_raw_output else current_idea
+            
+            # Custom prompt when using original raw output
+            if original_raw_output:
+                return f"""ORIGINAL GENERATED RESEARCH IDEA:
+        {idea_to_improve}
+
+        REVIEW FEEDBACK:
+        {formatted_feedback}
+
+        Please improve the research idea based on the specific feedback provided. Make targeted changes to address each critique while maintaining the original format and structure.
+
+        Return the complete improved idea in the same format as the original."""
+            else:
+                # Use the standard prompt template for formatted ideas
+                return IDEATION_IMPROVE_WITH_FEEDBACK_PROMPT.format(
+                    idea=idea_to_improve,
+                    feedback=formatted_feedback
+                )
+
+        elif action == "refine_with_retrieval" or action == "retrieve_and_refine":
             # Handle both formats: direct retrieved_content parameter or context_chunks 
             if "retrieved_content" in state:
                 # Direct content from API endpoint
                 retrieved_content = state.get("retrieved_content", "")
                             
             return IDEATION_REFINE_WITH_RETRIEVAL_PROMPT.format(
-                current_idea=current_idea, retrieved_content=retrieved_content
+                current_idea=current_idea, retrieved_content=retrieved_content, abstract_section=abstract_section
             )
         elif action == "process_feedback":
             # Handle user feedback from chat

@@ -379,78 +379,107 @@ const mctsAuto = {
 };
 
 // Toggle the automatic exploration on/off
-function toggleAutoGenerate() {
-    const button = document.querySelector('.auto-generate');
+// function toggleAutoGenerate() {
+//     const button = document.querySelector('.auto-generate');
     
-    if (mctsAuto.isRunning) {
-        mctsAuto.stopExploration();
-        button.classList.remove('active');
-        return false;
-    } else {
-        if (!mctsAuto.canStartExploration()) {
-            alert("Please enter a research idea first before starting automated exploration.");
-            return false;
-        }
+//     if (mctsAuto.isRunning) {
+//         mctsAuto.stopExploration();
+//         button.classList.remove('active');
+//         return false;
+//     } else {
+//         if (!mctsAuto.canStartExploration()) {
+//             alert("Please enter a research idea first before starting automated exploration.");
+//             return false;
+//         }
         
-        // Instead of using the client-side MCTS implementation directly,
-        // we'll use the server's UCT algorithm for action selection
-        // by sending the 'generate' action
-        button.classList.add('active');
+//         // Instead of using the client-side MCTS implementation directly,
+//         // we'll use the server's UCT algorithm for action selection
+//         // by sending the 'generate' action
+//         button.classList.add('active');
         
-        // Show a loading message in the chat
-        const chatArea = $("#chat-box");
-        const loadingMessage = $('<div></div>')
-            .attr('data-sender', 'system')
-            .text('Starting automated exploration...')
-            .hide();
+//         // Show a loading message in the chat
+//         const chatArea = $("#chat-box");
+//         const loadingMessage = $('<div></div>')
+//             .attr('data-sender', 'system')
+//             .text('Starting automated exploration...')
+//             .hide();
         
-        chatArea.append(loadingMessage);
-        loadingMessage.slideDown();
-        chatArea.animate({ scrollTop: chatArea[0].scrollHeight }, 'slow');
+//         chatArea.append(loadingMessage);
+//         loadingMessage.slideDown();
+//         chatArea.animate({ scrollTop: chatArea[0].scrollHeight }, 'slow');
         
-        // Call the backend with the 'generate' action
-        $.ajax({
-            url: '/api/step',
-            type: 'POST',
-            contentType: 'application/json',
-            data: JSON.stringify({ action: 'generate' }),
-            success: function(data) {
-                // Update the idea in the UI
-                if (data.idea) {
-                    $("#main-idea").html(formatMessage(data.idea));
-                }
+//         // Call the backend with the 'generate' action
+//         $.ajax({
+//             url: '/api/step',
+//             type: 'POST',
+//             contentType: 'application/json',
+//             data: JSON.stringify({ action: 'generate' }),
+//             success: function(data) {
+//                 // Update the idea in the UI
+//                 if (data.idea) {
+//                     $("#main-idea").html(formatMessage(data.idea));
+//                 }
                 
-                // Update chat with any new messages
-                if (data.messages) {
-                    updateChat(data.messages);
-                }
+//                 // Update chat with any new messages
+//                 if (data.messages) {
+//                     updateChat(data.messages);
+//                 }
                 
-                if (data.average_score !== undefined) {
-                    updateScoreDisplay(data.average_score);
-                }
+//                 if (data.average_score !== undefined) {
+//                     updateScoreDisplay(data.average_score);
+//                 }
                 
-                // Schedule the next automation step after a delay
-                setTimeout(() => {
-                    // If still in auto mode, continue with next step
-                    if (button.classList.contains('active')) {
-                        toggleAutoGenerate();
-                    }
-                }, 5000); // 5 second delay between steps
-            },
-            error: function(xhr, status, error) {
-                const errorMsg = $('<div></div>')
-                    .attr('data-sender', 'system')
-                    .text('Error: ' + (xhr.responseJSON?.error || error))
-                    .hide();
-                chatArea.append(errorMsg);
-                errorMsg.slideDown();
-                chatArea.animate({ scrollTop: chatArea[0].scrollHeight }, 'slow');
+//                 // Schedule the next automation step after a delay
+//                 setTimeout(() => {
+//                     // If still in auto mode, continue with next step
+//                     if (button.classList.contains('active')) {
+//                         toggleAutoGenerate();
+//                     }
+//                 }, 5000); // 5 second delay between steps
+//             },
+//             error: function(xhr, status, error) {
+//                 const errorMsg = $('<div></div>')
+//                     .attr('data-sender', 'system')
+//                     .text('Error: ' + (xhr.responseJSON?.error || error))
+//                     .hide();
+//                 chatArea.append(errorMsg);
+//                 errorMsg.slideDown();
+//                 chatArea.animate({ scrollTop: chatArea[0].scrollHeight }, 'slow');
                 
-                // Stop auto-generation on error
-                button.classList.remove('active');
-            }
-        });
+//                 // Stop auto-generation on error
+//                 button.classList.remove('active');
+//             }
+//         });
         
-        return true;
-    }
-}
+//         return true;
+//     }
+// }
+
+
+
+// Uncomment the code below to use the client side implmentation of MCTS logic and comment out the same code in the app.js file
+
+// function toggleAutoGenerate() {
+//     const button = document.querySelector('.auto-generate');
+    
+//     if (mctsAuto.isRunning) {
+//         // Stop the sophisticated MCTS exploration
+//         mctsAuto.stopExploration();
+//         button.classList.remove('active');
+//         return false;
+//     } else {
+//         if (!mctsAuto.canStartExploration()) {
+//             alert("Please enter a research idea first before starting automated exploration.");
+//             return false;
+//         }
+        
+//         // Use the sophisticated client-side MCTS implementation
+//         button.classList.add('active');
+//         mctsAuto.startExploration();
+//         return true;
+//     }
+// }
+
+// At the end of the file
+window.mctsAuto = mctsAuto;
+window.toggleAutoGenerate = toggleAutoGenerate;
