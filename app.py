@@ -1,6 +1,7 @@
 from flask import Flask, jsonify, request, render_template
 from flask_socketio import SocketIO, emit
 import os
+import random
 import math  # Add math module for UCT calculations
 from src.mcts.node import MCTSState, MCTSNode
 from src.mcts.tree import MCTS
@@ -27,7 +28,7 @@ from scholarqa.rag.retrieval import PaperFinder, PaperFinderWithReranker
 from scholarqa.rag.retriever_base import FullTextRetriever
 from scholarqa.rag.reranker.modal_engine import ModalReranker
 from scholarqa.rag.reranker.modal_engine import HuggingFaceReranker
-import fitz  # PyMuPDF for PDF parsing
+import pymupdf  # PyMuPDF for PDF parsing
 # Import the key manager
 # from src.utils.key_manager import encrypt_api_key, decrypt_api_key, get_client_encryption_script
 
@@ -82,6 +83,12 @@ def get_api_key(key_name, config_dict):
     
     return None
 
+def extract_abstract(pdf_text):
+    full_text = "\n".join(pdf_text)
+    match = re.search(r"(Abstract.*?)(\n(?:Introduction|Keywords|1\.)|\n{2,})", full_text, re.DOTALL | re.IGNORECASE)
+    if match:
+        return match.group(1).strip()
+    return "No abstract found."
 
 # Initialize MCTS
 mcts = MCTS("config/config.yaml")
@@ -406,12 +413,19 @@ def chat():
                 chat_messages.append(
                     {"role": "system", "content": "Generating initial idea..."}
                 )
+
+                # Extract the abstract from the knowledge chunks (if available)
+                abstract_text = ""
+                for chunk in knowledge_chunks:
+                    if "abstract" in chunk:
+                        abstract_text = chunk["abstract"]
+                        break 
                 
                 # Create a root state that represents just the research goal
                 root_state = MCTSState(
                     research_goal=user_message,
                     current_idea=user_message,  # Root node "idea" is the research goal itself
-                    retrieved_knowledge=[],
+                    retrieved_knowledge=[abstract_text],  # Pass abstract as retrieved knowledge
                     feedback={},
                     reward=0.0,
                     depth=0,
@@ -426,6 +440,7 @@ def chat():
                     {
                         "research_goal": user_message,
                         "current_idea": None,
+                        "abstract": abstract_text,
                         "action_type": "execute"
                     }
                 )
@@ -539,10 +554,330 @@ def chat():
             chat_messages.append({"role": "system", "content": error_message})
             return jsonify({"error": error_message}), 500
 
+#This is the step function for the simple UCT algorithm
+# @app.route("/api/step", methods=["POST"])
+# def step():
+#     global main_idea, current_node, current_state
+#     if current_node is None:
+#         return jsonify({"error": "Please enter an initial research idea first"}), 400
+
+#     data = request.get_json()
+#     if not data or "action" not in data:
+#         return jsonify({"error": "Invalid payload"}), 400
+
+#     action = data["action"]
+#     use_mcts = data.get('use_mcts', False)
+
+#     try:
+#         # Handle the automatic generation action using UCT algorithm
+#         if action == "generate":
+#             # Automatically select an action using UCT algorithm
+#             # First get valid actions
+#             valid_actions = ["review_and_refine", "retrieve_and_refine", "refresh_idea"]
+            
+#             # If use_mcts is True, log that we're using the MCTS algorithm
+#             if use_mcts:
+#                 chat_messages.append({
+#                     "role": "system", 
+#                     "content": "Using MCTS algorithm for automated exploration..."
+#                 })
+#             # Simple UCT action selection
+#             def uct_score(action):
+#                 # Get the child node for this action if it exists
+#                 child = None
+#                 for c in current_node.children:
+#                     if c.action == action:
+#                         child = c
+#                         break
+                
+#                 # If no child exists for this action, it's unexplored (high potential)
+#                 if not child:
+#                     return float('inf')
+                
+#                 # Calculate UCT score with exploration constant 1.414 (standard)
+#                 exploitation = child.value  # Use existing value property 
+#                 exploration = 1.414 * math.sqrt(math.log(current_node.visits) / max(child.visits, 1))
+                
+#                 # Add domain-specific heuristics
+#                 bonus = 0
+#                 # If low novelty score, prefer retrieve_and_refine
+#                 if action == "retrieve_and_refine" and hasattr(current_node.state, "review_scores"):
+#                     if current_node.state.review_scores.get("novelty", 10) < 7:
+#                         bonus += 0.2
+                
+#                 # If iteration count is high, prefer refresh_idea occasionally
+#                 if action == "refresh_idea" and current_node.depth > 3:
+#                     bonus += 0.15
+                
+#                 return exploitation + exploration + bonus
+            
+#             # Select action with highest UCT score
+#             selected_action = max(valid_actions, key=uct_score)
+            
+#             # Add system message about the selected action
+#             chat_messages.append({
+#                 "role": "system", 
+#                 "content": f"Auto-generating using '{selected_action.replace('_', ' ')}' strategy..."
+#             })
+            
+#             # Recursively call this function with the selected action
+#             return step_action(selected_action)
+            
+#         # Add handler for the judge action - needed by review_and_refine
+#         elif action == "judge":
+#             # Use the review agent to get a unified review of the current idea
+#             review_data = review_agent.unified_review(current_node.state.current_idea)
+            
+#             # Add the review scores to the current node's state
+#             if review_data:
+#                 if not hasattr(current_node.state, "review_scores") or not current_node.state.review_scores:
+#                     current_node.state.review_scores = {}
+#                 if "scores" in review_data:
+#                     current_node.state.review_scores = review_data["scores"]
+#                 if "reviews" in review_data:
+#                     current_node.state.review_feedback = review_data["reviews"]
+#                 if "average_score" in review_data:
+#                     current_node.state.average_score = review_data["average_score"]
+            
+#             # Add system message with review summary
+#             avg_score = review_data.get("average_score", 0)
+#             chat_messages.append({
+#                 "role": "system", 
+#                 "content": f"Review complete. Overall score: {avg_score:.1f}/10"
+#             })
+            
+#             # Return the review data
+#             return jsonify({
+#                 "idea": main_idea,
+#                 "nodeId": current_node.id,
+#                 "action": action,
+#                 "depth": current_node.state.depth,
+#                 "review_scores": review_data.get("scores", {}),
+#                 "average_score": review_data.get("average_score", 0.0),
+#                 "review_feedback": review_data.get("reviews", {})
+#             })
+        
+#         # Handle regular actions with their existing implementation
+#         elif action == "review_and_refine":
+#             # First get unified review
+#             review_data = review_agent.unified_review(current_node.state.current_idea)
+            
+#             # Sort aspects by score to find lowest scoring ones
+#             aspect_scores = []
+#             if "scores" in review_data:
+#                 aspect_scores = sorted(
+#                     review_data["scores"].items(),
+#                     key=lambda x: x[1]
+#                 )[:3]  # Get 3 lowest scoring aspects
+            
+#             # Get detailed reviews for lowest aspects
+#             detailed_reviews = []
+#             for aspect, score in aspect_scores:
+#                 review = structured_review_agent.review_aspect(
+#                     current_node.state.current_idea,
+#                     aspect
+#                 )
+#                 if review:
+#                     detailed_reviews.append(review)
+            
+#             # Create improvement prompt with focused feedback
+#             improvement_state = MCTSState(
+#                 research_goal=current_node.state.research_goal,
+#                 current_idea=current_node.state.current_idea,
+#                 retrieved_knowledge=current_node.state.retrieved_knowledge.copy(),
+#                 feedback=detailed_reviews,
+#                 depth=current_node.state.depth + 1
+#             )
+            
+#             # Get improved idea from ideation agent
+#             response = mcts.ideation_agent.execute_action(
+#                 "review_and_refine",
+#                 {
+#                     "current_idea": current_node.state.current_idea,
+#                     "reviews": detailed_reviews,
+#                     "action_type": "execute"
+#                 }
+#             )
+            
+#             # Update state with improved idea
+#             improvement_state.current_idea = response["content"]
+            
+#             # Get new review scores
+#             new_review = review_agent.unified_review(improvement_state.current_idea)
+#             if new_review:
+#                 improvement_state.review_scores = new_review.get("scores", {})
+#                 improvement_state.review_feedback = new_review.get("reviews", {})
+#                 improvement_state.average_score = new_review.get("average_score", 0.0)
+#                 improvement_state.reward = new_review.get("average_score", 0.0) / 10
+            
+#             # Create new node and update current
+#             new_node = current_node.add_child(improvement_state, action)
+#             current_node = new_node
+#             main_idea = improvement_state.current_idea
+
+#         elif action == "retrieve_and_refine":
+#             # Generate query based on current idea
+#             query_state = {
+#                 "current_idea": current_node.state.current_idea,
+#                 "action_type": "generate_query"
+#             }
+#             query_response = mcts.ideation_agent.execute_action("generate_query", query_state)
+            
+#             # Add system message about query generation
+#             chat_messages.append({
+#                 "role": "system",
+#                 "content": "Generating search query..."
+#             })
+            
+#             # Get search query
+#             query = None
+#             try:
+#                 if isinstance(query_response.get("content"), str):
+#                     import json
+#                     # Try to extract query from JSON in content
+#                     match = re.search(r'{.*}', query_response["content"])
+#                     if match:
+#                         query_json = json.loads(match.group())
+#                         query = query_json.get("query")
+#                     if not query:
+#                         # Fallback to using first sentence
+#                         query = query_response["content"].split(".")[0]
+
+#                     # Add message showing the generated query
+#                     chat_messages.append({
+#                         "role": "system", 
+#                         "content": f"Generated search query: {query}"
+#                     })
+
+#             except Exception as e:
+#                 print(f"Error parsing query: {e}")
+#                 query = current_node.state.current_idea[:100]  # Fallback to using truncated idea
+#                 chat_messages.append({
+#                     "role": "system",
+#                     "content": f"Failed to parse query, using fallback: {query}"
+#                 })
+            
+#             # Retrieve relevant papers
+#             chat_messages.append({
+#                 "role": "system",
+#                 "content": "Searching for relevant papers..."
+#             })
+            
+#             search_results = scholar_qa.answer_query(query)
+            
+#             # Add message showing search results
+#             if search_results and "sections" in search_results:
+#                 chat_messages.append({
+#                     "role": "system",
+#                     "content": f"Found {len(search_results['sections'])} relevant sections from papers"
+#                 })
+
+#             # Create new state with retrieved knowledge
+#             retrieval_state = MCTSState(
+#                 research_goal=current_node.state.research_goal,
+#                 current_idea=current_node.state.current_idea,
+#                 retrieved_knowledge=current_node.state.retrieved_knowledge + [search_results],
+#                 feedback=current_node.state.feedback.copy(),
+#                 depth=current_node.state.depth + 1
+#             )
+            
+#             # Improve idea with retrieved knowledge
+#             improvement_response = mcts.ideation_agent.execute_action(
+#                 "retrieve_and_refine",
+#                 {
+#                     "current_idea": current_node.state.current_idea,
+#                     "retrieved_content": search_results,
+#                     "action_type": "execute"
+#                 }
+#             )
+            
+#             # Update state with improved idea
+#             retrieval_state.current_idea = improvement_response["content"]
+            
+#             # Get new review scores
+#             new_review = review_agent.unified_review(retrieval_state.current_idea)
+#             if new_review:
+#                 retrieval_state.review_scores = new_review.get("scores", {})
+#                 retrieval_state.review_feedback = new_review.get("reviews", {})
+#                 retrieval_state.average_score = new_review.get("average_score", 0.0)
+#                 retrieval_state.reward = new_review.get("average_score", 0.0) / 10
+            
+#             # Create new node and update current
+#             new_node = current_node.add_child(retrieval_state, action)
+#             current_node = new_node
+#             main_idea = retrieval_state.current_idea
+
+#         elif action == "refresh_idea":
+#             # Get the research goal from the root node
+#             research_goal = None
+#             if hasattr(current_root.state, "research_goal"):
+#                 research_goal = current_root.state.research_goal
+
+#             # Get fresh perspective on the idea
+#             response = mcts.ideation_agent.execute_action(
+#                 "refresh_idea",
+#                 {
+#                     "research_goal": research_goal,
+#                     "current_idea": current_node.state.current_idea,
+#                     "action_type": "execute"
+#                 }
+#             )
+            
+#             # Create a new state with trajectory-level memory
+#             # Start with depth 1 since this is directly connected to the root
+#             refresh_state = MCTSState(
+#                 research_goal=research_goal,
+#                 current_idea=response["content"],
+#                 retrieved_knowledge=[],  # Start with empty retrieved knowledge for new approach
+#                 feedback={},  # Start with empty feedback for new approach
+#                 depth=1  # Directly connected to root, so depth is 1
+#             )
+            
+#             # Get new review scores
+#             new_review = review_agent.unified_review(refresh_state.current_idea)
+#             if new_review:
+#                 refresh_state.review_scores = new_review.get("scores", {})
+#                 refresh_state.review_feedback = new_review.get("reviews", {})
+#                 refresh_state.average_score = new_review.get("average_score", 0.0)
+#                 refresh_state.reward = new_review.get("average_score", 0.0) / 10
+            
+#             # Create new node and add as child of the ROOT node instead of current node
+#             new_node = current_root.add_child(refresh_state, action)
+            
+#             # Update current node to the newly created node
+#             current_node = new_node
+#             main_idea = refresh_state.current_idea
+
+#             # Add system message about the refresh
+#             chat_messages.append({
+#                 "role": "system", 
+#                 "content": "Created a new approach based on the original research goal."
+#             })
+
+#         else:
+#             return jsonify({"error": "Invalid action"}), 400
+
+#         # Return updated state
+#         return jsonify({
+#             "idea": main_idea,
+#             "nodeId": current_node.id,
+#             "action": action,
+#             "depth": current_node.state.depth,
+#             "review_scores": getattr(current_node.state, "review_scores", {}),
+#             "average_score": getattr(current_node.state, "average_score", 0.0),
+#             "retrieved_knowledge": bool(current_node.state.retrieved_knowledge),
+#             "has_feedback": bool(current_node.state.feedback)
+#         })
+
+#     except Exception as e:
+#         error_message = f"Error executing {action}: {str(e)}"
+#         traceback.print_exc()
+#         return jsonify({"error": error_message}), 500
 
 @app.route("/api/step", methods=["POST"])
 def step():
-    global main_idea, current_node, current_state
+    global main_idea, current_node, current_state, exploration_in_progress, current_root
+    
     if current_node is None:
         return jsonify({"error": "Please enter an initial research idea first"}), 400
 
@@ -551,56 +886,72 @@ def step():
         return jsonify({"error": "Invalid payload"}), 400
 
     action = data["action"]
+    use_mcts = data.get('use_mcts', False)
+    num_iterations = data.get('num_iterations', 1)
+    max_iterations = data.get('max_iterations', 5)
 
     try:
-        # Handle the automatic generation action using UCT algorithm
+        # Enhanced MCTS implementation following Algorithm 1 from the PDF
         if action == "generate":
-            # Automatically select an action using UCT algorithm
-            # First get valid actions
-            valid_actions = ["review_and_refine", "retrieve_and_refine", "refresh_idea"]
+            # Prevent concurrent MCTS executions
+            if exploration_in_progress:
+                return jsonify({"error": "MCTS exploration already in progress"}), 429
             
-            # Simple UCT action selection
-            def uct_score(action):
-                # Get the child node for this action if it exists
-                child = None
-                for c in current_node.children:
-                    if c.action == action:
-                        child = c
-                        break
-                
-                # If no child exists for this action, it's unexplored (high potential)
-                if not child:
-                    return float('inf')
-                
-                # Calculate UCT score with exploration constant 1.414 (standard)
-                exploitation = child.value  # Use existing value property 
-                exploration = 1.414 * math.sqrt(math.log(current_node.visits) / max(child.visits, 1))
-                
-                # Add domain-specific heuristics
-                bonus = 0
-                # If low novelty score, prefer retrieve_and_refine
-                if action == "retrieve_and_refine" and hasattr(current_node.state, "review_scores"):
-                    if current_node.state.review_scores.get("novelty", 10) < 7:
-                        bonus += 0.2
-                
-                # If iteration count is high, prefer refresh_idea occasionally
-                if action == "refresh_idea" and current_node.depth > 3:
-                    bonus += 0.15
-                
-                return exploitation + exploration + bonus
+            exploration_in_progress = True
             
-            # Select action with highest UCT score
-            selected_action = max(valid_actions, key=uct_score)
-            
-            # Add system message about the selected action
-            chat_messages.append({
-                "role": "system", 
-                "content": f"Auto-generating using '{selected_action.replace('_', ' ')}' strategy..."
-            })
-            
-            # Recursively call this function with the selected action
-            return step_action(selected_action)
-            
+            try:
+                
+                # Perform MCTS iterations
+                best_node = current_node
+                if use_mcts and num_iterations <= max_iterations:
+                    
+                    # Phase 1: SELECT - Traverse tree using UCT to find leaf node
+                    selected_node = mcts_select(current_root)
+                    
+                    # Phase 2: EVALUATE - Get reward for the selected state
+                    reward = mcts_evaluate(selected_node)
+                    
+                    # Phase 3: EXPAND - Create children if not terminal and below max depth
+                    if selected_node.state.depth < mcts.config["experiment"]["max_depth"]:
+                        mcts_expand(selected_node)
+                    
+                    # Phase 4: BACKPROPAGATE - Update Q and N values up the tree
+                    mcts_backpropagate(selected_node, reward)
+                    
+                    # Track the best node found so far
+                    if reward > (getattr(best_node.state, 'average_score', 0) / 10.0):
+                        best_node = selected_node
+                
+                # Select the best child of root after all iterations
+                final_best = mcts_best_child(current_root)
+                if final_best and hasattr(final_best.state, 'average_score'):
+                    if final_best.state.average_score > (getattr(best_node.state, 'average_score', 0)):
+                        best_node = final_best
+                
+                # Update current state to the best found
+                current_node = best_node
+                main_idea = best_node.state.current_idea
+                
+                chat_messages.append({
+                    "role": "system", 
+                    "content": f"✅ MCTS completed. Best score: {getattr(best_node.state, 'average_score', 0):.1f}/10"
+                })
+                
+                return jsonify({
+                    "idea": main_idea,
+                    "nodeId": current_node.id,
+                    "action": "mcts_exploration",
+                    "depth": current_node.state.depth,
+                    "visits": current_node.visits,
+                    "value": current_node.value,
+                    "review_scores": getattr(current_node.state, "review_scores", {}),
+                    "average_score": getattr(current_node.state, "average_score", 0.0),
+                    "messages": chat_messages[-5:]  # Return last 5 messages
+                })
+                
+            finally:
+                exploration_in_progress = False
+        
         # Add handler for the judge action - needed by review_and_refine
         elif action == "judge":
             # Use the review agent to get a unified review of the current idea
@@ -693,63 +1044,80 @@ def step():
             current_node = new_node
             main_idea = improvement_state.current_idea
 
+        # IMPLEMENT MISSING retrieve_and_refine ACTION
         elif action == "retrieve_and_refine":
-            # Generate query based on current idea
-            query_state = {
-                "current_idea": current_node.state.current_idea,
-                "action_type": "generate_query"
-            }
-            query_response = mcts.ideation_agent.execute_action("generate_query", query_state)
-            
-            # Add system message about query generation
+            # Step 1: Generate search query based on current idea
             chat_messages.append({
                 "role": "system",
-                "content": "Generating search query..."
+                "content": "Generating search query for knowledge retrieval..."
             })
             
-            # Get search query
+            # Generate query using ideation agent (consistent with frontend)
+            query_response = mcts.ideation_agent.execute_action(
+                "generate_query",
+                {
+                    "current_idea": current_node.state.current_idea,
+                    "action_type": "generate_query"
+                }
+            )
+            
+            # Extract query from response
             query = None
             try:
-                if isinstance(query_response.get("content"), str):
-                    import json
-                    # Try to extract query from JSON in content
-                    match = re.search(r'{.*}', query_response["content"])
-                    if match:
-                        query_json = json.loads(match.group())
-                        query = query_json.get("query")
-                    if not query:
-                        # Fallback to using first sentence
-                        query = query_response["content"].split(".")[0]
-
-                    # Add message showing the generated query
-                    chat_messages.append({
-                        "role": "system", 
-                        "content": f"Generated search query: {query}"
-                    })
-
+                content = query_response.get("content", "")
+                # Try to parse JSON response first
+                json_match = re.search(r'{.*}', content)
+                if json_match:
+                    query_json = json.loads(json_match.group())
+                    query = query_json.get("query", content.split(".")[0])
+                else:
+                    # Fallback to using first sentence
+                    query = content.split(".")[0] if content else current_node.state.current_idea[:100]
+                    
+                chat_messages.append({
+                    "role": "system", 
+                    "content": f"Generated search query: {query}"
+                })
+                
             except Exception as e:
                 print(f"Error parsing query: {e}")
-                query = current_node.state.current_idea[:100]  # Fallback to using truncated idea
-                chat_messages.append({
-                    "role": "system",
-                    "content": f"Failed to parse query, using fallback: {query}"
-                })
-            
-            # Retrieve relevant papers
+                query = current_node.state.current_idea[:100]  # Fallback
+                
+            # Step 2: Retrieve relevant knowledge using ScholarQA
             chat_messages.append({
                 "role": "system",
                 "content": "Searching for relevant papers..."
             })
             
-            search_results = scholar_qa.answer_query(query)
-            
-            # Add message showing search results
-            if search_results and "sections" in search_results:
+            try:
+                search_results = scholar_qa.answer_query(query)
+                
+                if search_results and "sections" in search_results:
+                    chat_messages.append({
+                        "role": "system",
+                        "content": f"Found {len(search_results['sections'])} relevant sections from papers"
+                    })
+                else:
+                    search_results = {"sections": [], "query": query}
+                    chat_messages.append({
+                        "role": "system",
+                        "content": "No relevant papers found, proceeding without additional knowledge"
+                    })
+                    
+            except Exception as e:
+                print(f"Error in knowledge retrieval: {e}")
+                search_results = {"sections": [], "query": query}
                 chat_messages.append({
                     "role": "system",
-                    "content": f"Found {len(search_results['sections'])} relevant sections from papers"
+                    "content": f"Error in retrieval: {str(e)}"
                 })
-
+            
+            # Step 3: Improve idea with retrieved knowledge
+            chat_messages.append({
+                "role": "system",
+                "content": "Refining idea with retrieved knowledge..."
+            })
+            
             # Create new state with retrieved knowledge
             retrieval_state = MCTSState(
                 research_goal=current_node.state.research_goal,
@@ -759,7 +1127,7 @@ def step():
                 depth=current_node.state.depth + 1
             )
             
-            # Improve idea with retrieved knowledge
+            # Improve idea with retrieved knowledge using ideation agent
             improvement_response = mcts.ideation_agent.execute_action(
                 "retrieve_and_refine",
                 {
@@ -772,7 +1140,7 @@ def step():
             # Update state with improved idea
             retrieval_state.current_idea = improvement_response["content"]
             
-            # Get new review scores
+            # Step 4: Get new review scores for the improved idea
             new_review = review_agent.unified_review(retrieval_state.current_idea)
             if new_review:
                 retrieval_state.review_scores = new_review.get("scores", {})
@@ -784,6 +1152,11 @@ def step():
             new_node = current_node.add_child(retrieval_state, action)
             current_node = new_node
             main_idea = retrieval_state.current_idea
+            
+            chat_messages.append({
+                "role": "system",
+                "content": f"Idea refined with retrieved knowledge. New score: {getattr(retrieval_state, 'average_score', 0):.1f}/10"
+            })
 
         elif action == "refresh_idea":
             # Get the research goal from the root node
@@ -802,14 +1175,16 @@ def step():
             )
             
             # Create a new state with trajectory-level memory
-            # Start with depth 1 since this is directly connected to the root
-            refresh_state = MCTSState(
-                research_goal=research_goal,
-                current_idea=response["content"],
-                retrieved_knowledge=[],  # Start with empty retrieved knowledge for new approach
-                feedback={},  # Start with empty feedback for new approach
-                depth=1  # Directly connected to root, so depth is 1
-            )
+            # # Start with depth 1 since this is directly connected to the root
+            # parent_depth = current_node.parent.state.depth if current_node.parent else 0
+            if response and "content" in response:
+                refresh_state = MCTSState(
+                    research_goal=research_goal,
+                    current_idea=response["content"],
+                    retrieved_knowledge=[],  # Start with empty retrieved knowledge for new approach
+                    feedback={},  # Start with empty feedback for new approach
+                    depth=current_node.state.depth +1  # Directly connected to root, so depth is 1
+                )
             
             # Get new review scores
             new_review = review_agent.unified_review(refresh_state.current_idea)
@@ -819,8 +1194,14 @@ def step():
                 refresh_state.average_score = new_review.get("average_score", 0.0)
                 refresh_state.reward = new_review.get("average_score", 0.0) / 10
             
-            # Create new node and add as child of the ROOT node instead of current node
-            new_node = current_root.add_child(refresh_state, action)
+            # FIXED: Create new node as child of current node's PARENT (sibling relationship)
+            if current_node.parent is not None:
+                # Current node has a parent - create sibling
+                parent_node = current_node.parent
+                new_node = parent_node.add_child(refresh_state, action)
+            else:
+                # Current node IS the root - create child of root
+                new_node = current_root.add_child(refresh_state, action)
             
             # Update current node to the newly created node
             current_node = new_node
@@ -848,9 +1229,298 @@ def step():
         })
 
     except Exception as e:
+        exploration_in_progress = False
         error_message = f"Error executing {action}: {str(e)}"
         traceback.print_exc()
         return jsonify({"error": error_message}), 500
+
+
+def execute_mcts_action(state, action):
+    """Execute an action within MCTS to create a new state"""
+    try:
+        if action == "review_and_refine":
+            # Get current reviews if not available
+            if not hasattr(state, "review_scores") or not state.review_scores:
+                review_data = review_agent.unified_review(state.current_idea)
+                if review_data:
+                    state.review_scores = review_data.get("scores", {})
+                    state.review_feedback = review_data.get("reviews", {})
+                    state.average_score = review_data.get("average_score", 0.0)
+            
+            # Find lowest scoring aspects for improvement
+            if hasattr(state, "review_scores") and state.review_scores:
+                sorted_aspects = sorted(state.review_scores.items(), key=lambda x: x[1])[:3]
+                detailed_reviews = []
+                for aspect, score in sorted_aspects:
+                    if hasattr(state, "review_feedback") and aspect in state.review_feedback:
+                        detailed_reviews.append({
+                            "aspect": aspect,
+                            "score": score,
+                            "feedback": state.review_feedback[aspect]
+                        })
+            else:
+                detailed_reviews = []
+            
+            # Get improved idea
+            response = mcts.ideation_agent.execute_action(
+                "review_and_refine",
+                {
+                    "current_idea": state.current_idea,
+                    "reviews": detailed_reviews,
+                    "action_type": "execute"
+                }
+            )
+            
+            # Create new state
+            new_state = MCTSState(
+                research_goal=state.research_goal,
+                current_idea=response["content"],
+                retrieved_knowledge=state.retrieved_knowledge.copy(),
+                feedback=state.feedback.copy(),
+                depth=state.depth + 1
+            )
+            
+            return new_state
+            
+        elif action == "retrieve_and_refine":
+            # FIXED: Implement proper retrieve_and_refine logic
+            # Step 1: Generate search query
+            query_response = mcts.ideation_agent.execute_action(
+                "generate_query",
+                {
+                    "current_idea": state.current_idea,
+                    "action_type": "generate_query"
+                }
+            )
+            
+            # Extract query from response
+            query = None
+            try:
+                content = query_response.get("content", "")
+                json_match = re.search(r'{.*}', content)
+                if json_match:
+                    query_json = json.loads(json_match.group())
+                    query = query_json.get("query", content.split(".")[0])
+                else:
+                    query = content.split(".")[0] if content else state.current_idea[:100]
+            except Exception as e:
+                logger.error(f"Error parsing query: {e}")
+                query = state.current_idea[:100]
+            
+            # Step 2: Retrieve knowledge
+            try:
+                search_results = scholar_qa.answer_query(query)
+                if not search_results or "sections" not in search_results:
+                    search_results = {"sections": [], "query": query}
+            except Exception as e:
+                logger.error(f"Error in knowledge retrieval: {e}")
+                search_results = {"sections": [], "query": query}
+            
+            # Step 3: Improve idea with retrieved knowledge
+            if search_results.get("sections"):
+                improvement_response = mcts.ideation_agent.execute_action(
+                    "retrieve_and_refine",
+                    {
+                        "current_idea": state.current_idea,
+                        "retrieved_content": search_results,
+                        "action_type": "execute"
+                    }
+                )
+                
+                new_state = MCTSState(
+                    research_goal=state.research_goal,
+                    current_idea=improvement_response["content"],
+                    retrieved_knowledge=state.retrieved_knowledge + [search_results],
+                    feedback=state.feedback.copy(),
+                    depth=state.depth + 1
+                )
+                
+                return new_state
+            else:
+                # No knowledge retrieved, return None to indicate failed action
+                return None
+            
+        elif action == "refresh_idea":
+            # Generate fresh approach
+            response = mcts.ideation_agent.execute_action(
+                "refresh_idea",
+                {
+                    "research_goal": state.research_goal,
+                    "current_idea": state.current_idea,
+                    "action_type": "execute"
+                }
+            )
+            
+            new_state = MCTSState(
+                research_goal=state.research_goal,
+                current_idea=response["content"],
+                retrieved_knowledge=[],  # Fresh start
+                feedback={},
+                depth=1  # Connect to root level
+            )
+            
+            return new_state
+            
+    except Exception as e:
+        logger.error(f"Error executing MCTS action {action}: {e}")
+        return None
+
+
+def mcts_expand(node):
+    """Phase 2: EXPAND - Add new child nodes for unexplored actions"""
+    if node.state.depth >= mcts.config["experiment"]["max_depth"]:
+        return
+    
+    valid_actions = ["review_and_refine", "retrieve_and_refine", "refresh_idea"]
+    
+    for action in valid_actions:
+        if not any(child.action == action for child in node.children):
+            try:
+                # Execute action to create new state
+                new_state = execute_mcts_action(node.state, action)
+                
+                if new_state:
+                    # # SPECIAL HANDLING FOR REFRESH_IDEA - create sibling instead of child
+                    # if action == "refresh_idea":
+                    #     # Add as child of parent (sibling of current node)
+                    #     parent_node = node.parent if node.parent else node  # Fallback to current if no parent
+                    #     child = parent_node.add_child(new_state, action)
+                    # else:
+                    #     # Regular child creation for other actions
+                    child = node.add_child(new_state, action)
+                    child.state.depth = node.state.depth + 1
+                    
+                    # Evaluate the new child/sibling node
+                    try:
+                        review_data = review_agent.unified_review(new_state.current_idea)
+                        if review_data:
+                            child.state.review_scores = review_data.get("scores", {})
+                            child.state.review_feedback = review_data.get("reviews", {})
+                            child.state.average_score = review_data.get("average_score", 0.0)
+                            child.state.reward = review_data.get("average_score", 0.0) / 10
+                            
+                            logger.info(f"Child node {child.id} evaluated with score: {child.state.average_score}")
+                        else:
+                            child.state.average_score = 5.0
+                            child.state.reward = 0.5
+                            
+                    except Exception as review_error:
+                        logger.error(f"Error evaluating child node {child.id}: {review_error}")
+                        child.state.average_score = 5.0
+                        child.state.reward = 0.5
+                    
+                    logger.info(f"Expanded node {node.id} with action {action}, created {'sibling' if action == 'refresh_idea' else 'child'} {child.id}")
+                
+            except Exception as e:
+                logger.error(f"Error expanding with action {action}: {e}")
+
+
+def mcts_select(root_node):
+    """Phase 1: SELECT - Traverse tree using UCT to find leaf node"""
+    current = root_node
+    path = [current]
+    
+    while True:
+        # If node has unvisited children, select one randomly
+        unvisited_children = [child for child in current.children if child.visits == 0]
+        if unvisited_children:
+            selected = random.choice(unvisited_children)
+            path.append(selected)
+            return selected
+        
+        # If all children visited, use UCT to select next node
+        if not current.children:
+            return current  # Leaf node
+        
+        # Calculate UCT scores for all children
+        best_child = None
+        best_uct = float('-inf')
+        
+        for child in current.children:
+            if child.visits == 0:
+                uct_value = float('inf')  # Unvisited nodes have infinite priority
+            else:
+                # UCT formula from PDF: Q(n)/N(n) + c * sqrt(ln(N(parent))/N(n))
+                exploitation = child.value  # Q(n)/N(n) is already calculated in child.value
+                exploration = math.sqrt(math.log(max(current.visits, 1)) / child.visits)
+                uct_value = exploitation + (1.414 * exploration)  # c = sqrt(2) ≈ 1.414
+            
+            if uct_value > best_uct:
+                best_uct = uct_value
+                best_child = child
+        
+        if best_child is None:
+            return current
+        
+        current = best_child
+        path.append(current)
+        
+        # If we've reached a leaf or terminal node, return it
+        if not current.children or current.state.depth >= mcts.config["experiment"]["max_depth"]:
+            return current
+
+
+def mcts_evaluate(node):
+    """Phase 2: EVALUATE - Get reward for the selected state via Review Agent"""
+    try:
+        # If node already has review scores, use them
+        if hasattr(node.state, 'average_score') and node.state.average_score > 0:
+            return node.state.average_score / 10.0  # Normalize to 0-1
+        
+        # Otherwise, get fresh review from Review Agent
+        review_data = review_agent.unified_review(node.state.current_idea)
+        
+        if review_data and "average_score" in review_data:
+            # Update node state with review data
+            node.state.review_scores = review_data.get("scores", {})
+            node.state.review_feedback = review_data.get("reviews", {})
+            node.state.average_score = review_data["average_score"]
+            node.state.reward = review_data["average_score"] / 10.0
+            
+            return node.state.reward
+        
+        # Fallback reward based on depth (deeper = less reward)
+        return 1.0 / (node.state.depth + 1)
+        
+    except Exception as e:
+        logger.error(f"Error in MCTS evaluate: {e}")
+        return 0.5  # Default middle reward
+
+
+
+def mcts_backpropagate(node, reward):
+    """Phase 4: BACKPROPAGATE - Update Q and N values for node and ancestors"""
+    current = node
+    current_reward = reward
+    
+    while current is not None:
+        # Update visit count
+        current.visits += 1
+        
+        # Update value using incremental average: value += (reward - value) / visits
+        current.value += (current_reward - current.value) / current.visits
+        
+        # Apply discount factor for parent nodes
+        current_reward *= mcts.discount_factor
+        
+        # Move to parent
+        current = current.parent
+
+
+def mcts_best_child(node):
+    """Select the child with highest average reward Q/N"""
+    if not node.children:
+        return None
+    
+    best_child = None
+    best_value = float('-inf')
+    
+    for child in node.children:
+        if child.visits > 0 and child.value > best_value:
+            best_value = child.value
+            best_child = child
+    
+    return best_child
 
 # Helper function to avoid code duplication
 def step_action(action):
@@ -1037,6 +1707,9 @@ def upload_file():
     if file.filename == "":
         return jsonify({"error": "No selected file"}), 400
 
+    # Initialize abstract variable
+    abstract = "Abstract could not be extracted"  # Default value in case no abstract is found
+
     if file and allowed_file(file.filename):
         filename = secure_filename(file.filename)
         unique_filename = f"{uuid.uuid4()}_{filename}"
@@ -1050,11 +1723,13 @@ def upload_file():
             if file_path.lower().endswith('.pdf'):
                 try:
                     pdf_text = []
-                    with fitz.open(file_path) as doc:
+                    with pymupdf.open(file_path) as doc:
                         for page_num in range(len(doc)):
                             page = doc.load_page(page_num)
                             pdf_text.append(page.get_text())
                     file_content = "\n".join(pdf_text)
+                    # Extract the abstract from the PDF content
+                    abstract = extract_abstract(pdf_text)
                 except Exception as pdf_err:
                     print(f"Error extracting PDF content: {pdf_err}")
             
@@ -1064,6 +1739,7 @@ def upload_file():
                 "id": new_id,
                 "text": f"Uploaded file: {filename}",
                 "full_text": file_content,
+                "abstract": abstract,  # Added abstract here
                 "source": file_path,
                 "file_type": "attachment",
             }
@@ -1074,6 +1750,7 @@ def upload_file():
                     {
                         "message": "File uploaded successfully",
                         "filename": filename,
+                        "abstract": abstract,
                         "chunk": chunk,
                     }
                 ),

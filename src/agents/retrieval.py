@@ -15,6 +15,22 @@ class RetrievalAgent(BaseAgent):
         super().__init__(config_path)
         self.processor = PaperProcessor(self.config)
         self.processed_papers: Dict[str, ProcessedPaper] = {}
+        # ADD: Query memory as described
+        self.past_queries = []  # Track past retrieval queries
+        self.memory_size = 3
+
+    def record_query(self, query: str):
+        """Record a retrieval query in memory"""
+        self.past_queries.append(query)
+        if len(self.past_queries) > self.memory_size:
+            self.past_queries.pop(0)
+    
+    def get_memory_context(self) -> Dict[str, Any]:
+        """Get memory context for query diversification"""
+        return {
+            "past_queries": self.past_queries,
+            "processed_papers_count": len(self.processed_papers)
+        }
     
     def act(self, state: Dict) -> Dict:
         """Take retrieval action based on current state."""

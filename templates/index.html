@@ -609,7 +609,7 @@
         <div class="chat">
             <div class="top-bar">
                 <div class="top-bar-buttons">
-                    <button class="auto-generate" onclick="event.preventDefault(); toggleAutoGenerate(); stepAction('generate'); return false;">
+                    <button class="auto-generate" onclick="event.preventDefault(); toggleAutoGenerate(); return false;">
                         <img src="{{ url_for('static', filename='icons/auto.svg') }}" alt="Auto">
                         <span>Automate Generation</span>
                     </button>
