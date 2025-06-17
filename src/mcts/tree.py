@@ -199,11 +199,17 @@ class MCTS:
                 "current_idea": state.current_idea,
                 "depth": state.depth,
                 "action": action,
+                "current_state": state,  # Pass the full state for memory access
+                "memory_context": state.get_memory_context(),
             }
 
             # Add research goal if available
             if hasattr(state, "research_goal") and state.research_goal:
                 state_dict["research_goal"] = state.research_goal
+
+            # Add memory-aware context
+            if hasattr(state, "get_memory_context"):
+                state_dict["memory_context"] = state.get_memory_context()
 
             # Add review criteria if available
             if hasattr(state, "review_scores") and hasattr(state, "review_feedback"):
@@ -213,11 +219,21 @@ class MCTS:
                         review_criteria.append((criterion, state.review_feedback.get(criterion, "")))
                 state_dict["review_criteria"] = review_criteria
 
-            # Add context chunks for retrieval-based refinement
+            # Memory-aware action execution
             if action == "retrieve_and_refine":
-                # Implement retrieval logic here or use a placeholder
-                context_chunks = self._retrieve_relevant_chunks(state.current_idea)
+                
+                # Execute with memory context
+                context_chunks = self._execute_retrieve_and_refine_with_memory(state, state_dict)
                 state_dict["context_chunks"] = context_chunks
+
+            if action == "review_and_refine":
+                
+                # Execute with memory context
+                return self._execute_review_and_refine_with_memory(state, state_dict)
+
+            # Add abstract to state_dict if available
+            if hasattr(state, "abstract") and state.abstract:
+                state_dict["abstract"] = state.abstract
 
             # Delegate action execution to ideation agent
             response = self.ideation_agent.execute_action(action, state_dict)
@@ -235,6 +251,15 @@ class MCTS:
                 reward=reward
             )
 
+            # Copy memory state from parent
+            new_state.last_action = state.last_action
+            new_state.last_query = state.last_query
+            new_state.problematic_aspects = state.problematic_aspects.copy()
+            new_state.action_count = state.action_count.copy()
+
+            # Record this action in memory
+            new_state.record_action(action, query=state_dict.get("query"))
+
             # Add review data to state
             if review_data:
                 if "scores" in review_data:
@@ -250,9 +275,133 @@ class MCTS:
             return new_state
 
         except Exception as e:
-            logger.error(f"Error executing action: {e}")
-            return self._execute_simple_refinement(state)
-
+            logger.error(f"Error executing action {action}: {e}")
+            return self._create_fallback_state(state)
+    
+    
+    def _execute_retrieve_and_refine_with_memory(self, state: MCTSState, state_dict: Dict) -> MCTSState:
+        """Execute retrieve_and_refine with memory using existing functions."""
+        try:
+            # Generate search query using existing retrieval logic
+            # Extract key concepts from current idea for search
+            search_query = self._extract_search_terms(state.current_idea)
+            
+            # Avoid repeating last query (moved after search_query is defined)
+            if state.last_query and search_query == state.last_query:
+                # Modify query slightly for diversity
+                search_query = f"{search_query} methodology approach"
+            
+            # Use existing retrieval function
+            context_chunks = self._retrieve_and_process_papers([search_query])
+            
+            if context_chunks:
+                # Add retrieved context to state using existing pattern
+                state_dict["context_chunks"] = context_chunks
+                
+                # Use existing retrieve_and_refine action
+                response = self.ideation_agent.execute_action("retrieve_and_refine", state_dict)
+                
+                # Create new state using existing function
+                new_state = self._create_new_state_from_response(state, response, "retrieve_and_refine")
+                new_state.record_action("retrieve_and_refine", query=search_query)
+                
+                return new_state
+            else:
+                return self._create_fallback_state(state)
+            
+        except Exception as e:
+            logger.error(f"Error in retrieve_and_refine with memory: {e}")
+            return self._create_fallback_state(state)
+    
+    def _execute_review_and_refine_with_memory(self, state: MCTSState, state_dict: Dict) -> MCTSState:
+        """Execute review_and_refine with memory using existing functions."""
+        try:
+            # Use existing unified review
+            review_data = self.review_agent.unified_review(state.current_idea)
+            
+            if review_data:
+                # Identify low-scoring aspects for memory
+                scores = review_data.get("scores", {})
+                low_scoring = [aspect for aspect, score in scores.items() if score < 6]
+                
+                # Focus on aspects not recently reviewed (memory-based steering)
+                if state.problematic_aspects:
+                    # Prioritize aspects that haven't been addressed recently
+                    new_focus_aspects = [asp for asp in low_scoring if asp not in state.problematic_aspects[-2:]]
+                    if new_focus_aspects:
+                        low_scoring = new_focus_aspects[:3]  # Focus on top 3 new aspects
+                
+                # Add review data to state using existing pattern
+                if "scores" in review_data:
+                    state_dict["review_scores"] = review_data["scores"]
+                if "reviews" in review_data:
+                    state_dict["reviews"] = review_data["reviews"]
+                    
+                # Add memory context for non-redundant refinement
+                if state.problematic_aspects:
+                    state_dict["memory_context"] = f"Previously problematic aspects: {', '.join(state.problematic_aspects[-3:])}"
+                
+                # Use existing review_and_refine action
+                response = self.ideation_agent.execute_action("review_and_refine", state_dict)
+                
+                # Create new state using existing function
+                new_state = self._create_new_state_from_response(state, response, "review_and_refine")
+                new_state.record_action("review_and_refine", low_scoring_aspects=low_scoring)
+                
+                return new_state
+            else:
+                return self._create_fallback_state(state)
+                
+        except Exception as e:
+            logger.error(f"Error in review_and_refine with memory: {e}")
+            return self._create_fallback_state(state)
+    
+    def _create_new_state_from_response(self, old_state: MCTSState, response: Dict, action: str) -> MCTSState:
+        """Create new state from response - using existing pattern."""
+        new_state = MCTSState(
+            research_goal=old_state.research_goal,
+            current_idea=response["content"],
+            depth=old_state.depth + 1,
+            reward=0.0,
+            retrieved_knowledge=getattr(old_state, 'retrieved_knowledge', []),
+            feedback=getattr(old_state, 'feedback', {})
+        )
+        
+        # Copy memory state (initialize if not exists)
+        new_state.last_action = getattr(old_state, 'last_action', None)
+        new_state.last_query = getattr(old_state, 'last_query', None)
+        new_state.problematic_aspects = getattr(old_state, 'problematic_aspects', []).copy()
+        new_state.action_count = getattr(old_state, 'action_count', {}).copy()
+        
+        # Use existing review function
+        review_data = self.review_agent.unified_review(response["content"])
+        if review_data:
+            new_state.review_scores = review_data.get("scores", {})
+            new_state.review_feedback = review_data.get("reviews", {})
+            new_state.average_score = review_data.get("average_score", 0.0)
+            new_state.reward = review_data.get("average_score", 0.0) / 10
+        
+        return new_state
+    
+    def _create_fallback_state(self, state: MCTSState) -> MCTSState:
+        """Create fallback state when action fails."""
+        fallback_state = MCTSState(
+            research_goal=state.research_goal,
+            current_idea=state.current_idea,
+            depth=state.depth + 1,
+            reward=0.1,
+            retrieved_knowledge=getattr(state, 'retrieved_knowledge', []),
+            feedback=getattr(state, 'feedback', {})
+        )
+        
+        # Copy memory safely
+        fallback_state.last_action = getattr(state, 'last_action', None)
+        fallback_state.last_query = getattr(state, 'last_query', None)
+        fallback_state.problematic_aspects = getattr(state, 'problematic_aspects', []).copy()
+        fallback_state.action_count = getattr(state, 'action_count', {}).copy()
+        
+        return fallback_state
+    
     def _retrieve_relevant_chunks(self, idea: str) -> List[str]:
         """Retrieve relevant text chunks for a given idea."""
         # Placeholder implementation - in a real system, this would use a retrieval system

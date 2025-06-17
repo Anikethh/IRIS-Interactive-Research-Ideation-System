@@ -29,6 +29,54 @@ class ReviewAgent(BaseAgent):
             "impact": 0.2
         }
 
+        # Add trajectory-level memory
+        self.prior_feedback = []  # Memory of prior feedback
+        self.reviewed_aspects = []  # Memory of recently reviewed aspects
+        self.memory_size = 3  # Keep last 3 items
+
+    def record_feedback(self, feedback: Dict[str, Any]):
+        """Record feedback in memory"""
+        # Store key aspects of feedback
+        feedback_summary = {
+            "aspects": list(feedback.get("scores", {}).keys()),
+            "low_scoring": [k for k, v in feedback.get("scores", {}).items() if v < 6],
+            "average_score": feedback.get("average_score", 0)
+        }
+        
+        self.prior_feedback.append(feedback_summary)
+        if len(self.prior_feedback) > self.memory_size:
+            self.prior_feedback.pop(0)
+        
+        # Track reviewed aspects
+        self.reviewed_aspects.extend(feedback_summary["aspects"])
+        if len(self.reviewed_aspects) > self.memory_size * 5:  # Keep more aspects
+            self.reviewed_aspects = self.reviewed_aspects[-self.memory_size * 5:]
+    
+    def get_memory_context(self) -> Dict[str, Any]:
+        """Get memory context for focused review"""
+        return {
+            "prior_feedback": self.prior_feedback[-self.memory_size:],
+            "recently_reviewed": list(set(self.reviewed_aspects[-10:])),  # Last 10 unique aspects
+            "focus_areas": self._get_focus_areas()
+        }
+    
+    def _get_focus_areas(self) -> List[str]:
+        """Identify areas that need focus based on memory"""
+        focus_areas = []
+        
+        # Find consistently low-scoring aspects
+        aspect_scores = {}
+        for feedback in self.prior_feedback:
+            for aspect in feedback.get("low_scoring", []):
+                aspect_scores[aspect] = aspect_scores.get(aspect, 0) + 1
+        
+        # Focus on aspects that have been consistently problematic
+        for aspect, count in aspect_scores.items():
+            if count >= 2:  # Appeared as low-scoring at least twice
+                focus_areas.append(aspect)
+        
+        return focus_areas
+
     def set_aspect_weights(self, weights: Dict[str, float]) -> None:
         """Update the weights for different aspects. Weights should sum to 1."""
         # Validate weights
@@ -67,8 +115,20 @@ class ReviewAgent(BaseAgent):
     def unified_review(self, idea: str) -> Dict[str, Any]:
         """Review all aspects of an idea in a single call and compute the weighted average score."""
         try:
+            # Get memory context
+            memory_context = self.get_memory_context()
             # Use the unified review prompt template from prompts.py
             prompt = UNIFIED_REVIEW_PROMPT.format(research_idea=idea)
+
+            # Add memory context for focused review
+            memory_prompt = ""
+            if memory_context["focus_areas"]:
+                memory_prompt = f"\n\nFocus particularly on these previously problematic aspects: {', '.join(memory_context['focus_areas'])}"
+            
+            if memory_context["recently_reviewed"]:
+                memory_prompt += f"\n\nRecently reviewed aspects: {', '.join(memory_context['recently_reviewed'])}"
+            
+            prompt += memory_prompt
             
             # Prepare messages for the chat
             messages = [

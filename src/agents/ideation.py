@@ -36,6 +36,28 @@ class IdeationAgent(BaseAgent):
         # self.model = "gemini/gemini-2.0-flash"
         print(f"Using model: {self.model}")
 
+        # Add trajectory-level memory
+        self.generated_briefs = []  # Memory of generated briefs
+        self.recent_approaches = []  # Memory of recent approaches
+        self.memory_size = 3  # Keep last 3 items
+
+    def record_brief(self, brief: str):
+        """Record a generated brief in memory"""
+        self.generated_briefs.append(brief[:200])  # Store first 200 chars
+        if len(self.generated_briefs) > self.memory_size:
+            self.generated_briefs.pop(0)
+    
+    def get_memory_context(self) -> str:
+        """Get memory context for non-redundant generation"""
+        if not self.generated_briefs:
+            return ""
+        
+        context = "Previous approaches to avoid redundancy:\n"
+        for i, brief in enumerate(self.generated_briefs, 1):
+            context += f"{i}. {brief}...\n"
+        
+        return context
+
     @retry.retry(tries=3, delay=2)
     def chat(self, model: str, messages: List[Dict[str, str]]) -> Dict[str, Any]:
         """Send a chat request to the model."""
@@ -65,6 +87,11 @@ class IdeationAgent(BaseAgent):
     def execute_action(self, action: str, state: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a specific ideation action based on the current state."""
         try:
+            # Add memory context to state
+            if hasattr(state.get('current_state'), 'get_memory_context'):
+                memory_context = state['current_state'].get_memory_context()
+                state['memory_context'] = memory_context
+            
             prompt = self._get_action_prompt(action, state)
 
             messages = [
@@ -79,11 +106,15 @@ class IdeationAgent(BaseAgent):
             print(f"\n===== RAW LLM OUTPUT FOR {action} =====")
             print(content)
             print("=====================================\n")
+
+            # Record the brief if it's a generation action
+            if action == "generate":
+                self.record_brief(content)
             
             # For query generation, use specialized extraction
             if action == "generate_query":
-                # query = self._extract_query(content)
-                query = "Transformer attention irrelevant context long-context modeling key information retrieval hallucination mitigation in-context learning robustness activation outliers"
+                query = self._extract_query(content)
+                #query = "Transformer attention irrelevant context long-context modeling key information retrieval hallucination mitigation in-context learning robustness activation outliers"
                 print(f"\n===== EXTRACTED QUERY =====")
                 print(f"Query: {query}")
                 print("============================\n")
@@ -352,25 +383,109 @@ class IdeationAgent(BaseAgent):
         """Get the appropriate prompt for the given action."""
         research_goal = state.get("research_goal", "")  # Get research_goal directly
         current_idea = state.get("current_idea", "")
+        abstract = state.get("abstract", "")
 
         if action == "generate":
-            return IDEATION_GENERATE_PROMPT.format(research_topic=research_goal or current_idea)
+            # Add memory context to avoid redundancy
+            memory_context = self.get_memory_context()
+            prompt = IDEATION_GENERATE_PROMPT.format(research_topic=research_goal or current_idea, abstract_section=abstract)
+            if memory_context:
+                prompt += f"\n\nMemory context (avoid these approaches):\n{memory_context}"
+            return prompt
+        
         elif action == "generate_query":
-            return IDEATION_GENERATE_QUERY_PROMPT.format(research_idea=current_idea)
+            # Add memory context to avoid redundant queries
+            memory_context = state.get("memory_context", {})
+            memory_prompt = ""
+            if memory_context:
+                last_query = memory_context.get('last_query')
+                if last_query:
+                    memory_prompt = f"\n\nPrevious query: {last_query}\nGenerate a different query focusing on other aspects."
+            return IDEATION_GENERATE_QUERY_PROMPT.format(research_idea=current_idea) + memory_prompt
         elif action == "refresh_idea":
+            # Add memory context to ensure fresh approach
+            memory_context = self.get_memory_context()
+            memory_prompt = ""
+            if memory_context:
+                memory_prompt = f"\n\n{memory_context}\n\nGenerate a completely different approach that avoids the above patterns."
             return IDEATION_REFRESH_APPROACH_PROMPT.format(
                 research_topic=research_goal,
-                current_idea=current_idea
-            )
-        elif action == "refine_with_retrieval":
+                current_idea=current_idea,
+                abstract_section=abstract
+            ) + memory_prompt
+        elif action == "review_and_refine":
+            # Handle review feedback from state
+            accepted_reviews = state.get("review_feedback", [])
+            original_raw_output = state.get("original_raw_output")
+
+            # Add memory context for non-redundant refinement
+            memory_context = state.get("memory_context", {})
+            
+            # Format the accepted reviews into a structured feedback string
+            review_feedback = []
+            for review in accepted_reviews:
+                aspect = review.get('aspect', 'general')
+                summary = review.get('summary', '')
+                score = review.get('score', 0)
+                highlight = review.get('highlight', {})
+                
+                feedback_item = f"Aspect: {aspect.capitalize()} (Score: {score}/10)\n"
+                feedback_item += f"Summary: {summary}\n"
+                
+                if highlight:
+                    feedback_item += f"Highlighted text: \"{highlight.get('text', '')}\"\n"
+                    feedback_item += f"Specific feedback: {highlight.get('review', '')}\n"
+                
+                review_feedback.append(feedback_item)
+            
+            # Join all feedback into a single string
+            formatted_feedback = "\n".join(review_feedback)
+
+            # Add memory context to avoid redundant refinements
+            memory_prompt = ""
+            if memory_context:
+                problematic_aspects = memory_context.get('problematic_aspects', [])
+                if problematic_aspects:
+                    memory_prompt = f"\n\nPreviously addressed aspects (focus on new issues): {', '.join(problematic_aspects[-3:])}"
+            
+            # Determine which version of the idea to use
+            idea_to_improve = original_raw_output if original_raw_output else current_idea
+            
+            # Custom prompt when using original raw output
+            if original_raw_output:
+                return f"""ORIGINAL GENERATED RESEARCH IDEA:
+        {idea_to_improve}
+
+        REVIEW FEEDBACK:
+        {formatted_feedback}
+
+        Please improve the research idea based on the specific feedback provided. Make targeted changes to address each critique while maintaining the original format and structure.
+
+        Return the complete improved idea in the same format as the original.""" + memory_prompt
+            else:
+                # Use the standard prompt template for formatted ideas
+                return IDEATION_IMPROVE_WITH_FEEDBACK_PROMPT.format(
+                    idea=idea_to_improve,
+                    feedback=formatted_feedback
+                ) + memory_prompt
+
+        elif action == "refine_with_retrieval" or action == "retrieve_and_refine":
+            # Add memory context to avoid redundant queries
+            memory_context = state.get("memory_context", {})
+            memory_prompt = ""
+            
+            if memory_context:
+                last_query = memory_context.get('last_query')
+                if last_query:
+                    memory_prompt = f"\n\nPrevious query (try different approach): {last_query}"
             # Handle both formats: direct retrieved_content parameter or context_chunks 
             if "retrieved_content" in state:
                 # Direct content from API endpoint
                 retrieved_content = state.get("retrieved_content", "")
                             
             return IDEATION_REFINE_WITH_RETRIEVAL_PROMPT.format(
-                current_idea=current_idea, retrieved_content=retrieved_content
-            )
+                current_idea=current_idea, retrieved_content=retrieved_content, abstract_section=abstract
+            ) + memory_prompt
         elif action == "process_feedback":
             # Handle user feedback from chat
             user_feedback = state.get("user_feedback", "")
