@@ -8,6 +8,7 @@ experiment:
   log_dir: "logs/"
   prompts_path: "config/prompts.yaml"
   save_frequency: 1
+  max_depth: 3
 
 # Flask application configuration
 app:
@@ -25,7 +26,7 @@ logging:
 mcts:
   exploration_constant: 1.414
   max_iterations: 100
-  max_depth: 10
+  max_depth: 3
   discount_factor: 0.9
 
 # LLM agent configuration

@@ -10,11 +10,13 @@ const MCTS_CONFIG = {
     maxIterations: 5,
     explorationDelay: 3000,
     explorationConstant: 1.414,
-    discountFactor: 0.95
+    discountFactor: 0.95,
+    maxDepth: 3
 };
 
 // Add iteration tracking variable
 let mctsIterationCount = 0;
+let currentMCTSDepth = 0;
 
 // Initialize highlight state and tree variables
 const highlightState = {
@@ -454,9 +456,16 @@ function toggleAutoGenerate() {
     if (button.hasClass("active")) {
         // Stop auto-generation
         button.removeClass("active");
-        clearTimeout(window.autoGenerateTimer);
-        window.autoGenerateTimer = null;
-        mctsIterationCount = 0; // Reset counter
+        
+        // Clear timer immediately
+        if (window.autoGenerateTimer) {
+            clearTimeout(window.autoGenerateTimer);
+            window.autoGenerateTimer = null;
+        }
+        
+        // Reset counter
+        mctsIterationCount = 0;
+        currentMCTSDepth = 0;
         
         // Add system message about stopping
         const chatArea = $("#chat-box");
@@ -468,51 +477,28 @@ function toggleAutoGenerate() {
         stopMessage.slideDown();
         chatArea.animate({ scrollTop: chatArea[0].scrollHeight }, 'slow');
 
-                // Make one final regular API call to trigger best child selection
+        // Get final best result
         $.ajax({
-            url: '/api/step',
+            url: '/api/get_best_child',
             type: 'POST',
-            contentType: 'application/json',
-            data: JSON.stringify({ 
-                action: 'generate',  // Use existing action
-                use_mcts: false      // This will trigger the mcts_best_child logic
-            }),
             success: function(data) {
-                console.log('Final best child result:', data);
-                
-                // Update with the best idea found
                 if (data.idea) {
                     const structuredIdea = parseAndFormatStructuredIdea ? 
                         parseAndFormatStructuredIdea(data.idea) : data.idea;
-                    
                     $("#main-idea").html(formatMessage ? formatMessage(structuredIdea) : structuredIdea);
                     
                     if (typeof window !== 'undefined') {
                         window.main_idea = data.idea;
                     }
-                    
-                    $("#brief-placeholder").hide();
-                    $("#main-idea").show();
                 }
                 
-                // Update score display
-                if (data.average_score !== undefined && typeof updateScoreDisplay === 'function') {
-                    updateScoreDisplay(data.average_score);
-                }
-                
-                // Show final result message
                 const finalMessage = $('<div></div>')
                     .attr('data-sender', 'system')
-                    .text(`🏆 Best idea selected from ${mctsIterationCount} iterations.`)
+                    .text(`🏆 Best idea selected from exploration.`)
                     .hide();
                 chatArea.append(finalMessage);
                 finalMessage.slideDown();
                 chatArea.animate({ scrollTop: chatArea[0].scrollHeight }, 'slow');
-                
-                // Update tree visualization
-                if (typeof loadTree === 'function') {
-                    loadTree();
-                }
             },
             error: function(xhr, status, error) {
                 console.error('Error getting best child:', error);
@@ -522,12 +508,10 @@ function toggleAutoGenerate() {
                     .hide();
                 chatArea.append(errorMsg);
                 errorMsg.slideDown();
-            },
-            complete: function() {
-                // Reset counter after everything is done
-                mctsIterationCount = 0;
             }
         });
+        
+        return; // Exit early
     } else {
         // Check if we have an idea to work with
         const mainIdea = $("#main-idea").text().trim();
@@ -536,8 +520,9 @@ function toggleAutoGenerate() {
             return;
         }
         
-        // Reset iteration counter and start auto-generation
+        // Reset counters and start auto-generation
         mctsIterationCount = 0;
+        currentMCTSDepth = 0;
         button.addClass("active");
         
         // Add system message about starting
@@ -550,39 +535,86 @@ function toggleAutoGenerate() {
         startMessage.slideDown();
         chatArea.animate({ scrollTop: chatArea[0].scrollHeight }, 'slow');
         
-        // Define recursive function for continuous exploration
+        // Helper functions
+        function getCurrentDepth() {
+            return currentMCTSDepth;
+        }
+        
+        function updateMCTSDepth(newDepth) {
+            currentMCTSDepth = newDepth;
+        }
+        
+        // FIXED: Main exploration function
         function performMCTSStep() {
-            // Check iteration limit using hyperparameters
-            const shouldStop = !button.hasClass("active") || mctsIterationCount >= MCTS_CONFIG.maxIterations;
-    
-            if (shouldStop) {
-                // Clear any pending timers
+            // Check stop conditions FIRST
+            const maxIterationsReached = mctsIterationCount >= MCTS_CONFIG.maxIterations;
+            const maxDepthReached = currentMCTSDepth >= MCTS_CONFIG.maxDepth;
+            const buttonInactive = !button.hasClass("active");
+            
+            if (buttonInactive || maxIterationsReached || maxDepthReached) {
+                // STOP: Clean up and show final results
+                
+                // Clear timer
                 if (window.autoGenerateTimer) {
                     clearTimeout(window.autoGenerateTimer);
                     window.autoGenerateTimer = null;
                 }
                 
-                // Remove active class and show completion message
+                // Remove active class
                 button.removeClass("active");
                 
-                if (mctsIterationCount >= MCTS_CONFIG.maxIterations) {
-                    const chatArea = $("#chat-box");
-                    const completionMessage = $('<div></div>')
-                        .attr('data-sender', 'system')
-                        .text(`✅ MCTS exploration completed after ${mctsIterationCount} iterations.`)
-                        .hide();
-                    chatArea.append(completionMessage);
-                    completionMessage.slideDown();
-                    chatArea.animate({ scrollTop: chatArea[0].scrollHeight }, 'slow');
-                }
+                // Show completion message
+                const chatArea = $("#chat-box");
+                let reason = "manually stopped";
+                if (maxIterationsReached) reason = `completed after ${mctsIterationCount} iterations`;
+                if (maxDepthReached) reason = `reached maximum depth ${currentMCTSDepth}`;
                 
-                // Reset counter
+                const completionMessage = $('<div></div>')
+                    .attr('data-sender', 'system')
+                    .text(`✅ MCTS exploration ${reason}.`)
+                    .hide();
+                chatArea.append(completionMessage);
+                completionMessage.slideDown();
+                chatArea.animate({ scrollTop: chatArea[0].scrollHeight }, 'slow');
+                
+                // Get final best result
+                $.ajax({
+                    url: '/api/get_best_child',
+                    type: 'POST',
+                    success: function(data) {
+                        if (data.idea) {
+                            const structuredIdea = parseAndFormatStructuredIdea ? 
+                                parseAndFormatStructuredIdea(data.idea) : data.idea;
+                            $("#main-idea").html(formatMessage ? formatMessage(structuredIdea) : structuredIdea);
+                            
+                            if (typeof window !== 'undefined') {
+                                window.main_idea = data.idea;
+                            }
+                        }
+                        
+                        const finalMessage = $('<div></div>')
+                            .attr('data-sender', 'system')
+                            .text(`🏆 Best idea selected from ${mctsIterationCount} iterations.`)
+                            .hide();
+                        chatArea.append(finalMessage);
+                        finalMessage.slideDown();
+                        chatArea.animate({ scrollTop: chatArea[0].scrollHeight }, 'slow');
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Error getting best child:', error);
+                    }
+                });
+                
+                // Reset counters
                 mctsIterationCount = 0;
-                return;
+                currentMCTSDepth = 0;
+                return; // ✅ FIXED: Exit without recursive call
             }
             
-            // Increment iteration counter
+            // CONTINUE: Perform next MCTS step
             mctsIterationCount++;
+            
+            console.log(`Starting MCTS iteration ${mctsIterationCount}/${MCTS_CONFIG.maxIterations}`);
             
             // Call the backend with the generate action and use_mcts flag
             $.ajax({
@@ -597,7 +629,12 @@ function toggleAutoGenerate() {
                     max_iterations: MCTS_CONFIG.maxIterations
                 }),
                 success: function(data) {
-                    console.log(`MCTS step ${mctsIterationCount}/${MCTS_CONFIG.maxIterations} response:`, data);
+                    console.log(`MCTS step ${mctsIterationCount}/${MCTS_CONFIG.maxIterations} completed:`, data);
+                    
+                    // Update depth from backend response
+                    if (data.depth !== undefined) {
+                        updateMCTSDepth(data.depth);
+                    }
                     
                     // Update Research Brief panel
                     if (data.idea) {
@@ -621,18 +658,32 @@ function toggleAutoGenerate() {
                         updateScoreDisplay(data.average_score);
                     }
                     
+                    // Add progress message
+                    const chatArea = $("#chat-box");
+                    const progressMsg = $('<div></div>')
+                        .attr('data-sender', 'system')
+                        .text(`🔄 MCTS Iteration ${mctsIterationCount}/${MCTS_CONFIG.maxIterations} (Depth: ${currentMCTSDepth}/${MCTS_CONFIG.maxDepth}) - Score: ${(data.average_score || 0).toFixed(1)}/10`)
+                        .hide();
+                    chatArea.append(progressMsg);
+                    progressMsg.slideDown();
+                    chatArea.animate({ scrollTop: chatArea[0].scrollHeight }, 'slow');
+                    
                     // Update tree visualization if available
                     if (typeof loadTree === 'function') {
                         loadTree();
                     }
                     
-                    // Schedule next step using hyperparameter delay
-                    if (button.hasClass("active") && mctsIterationCount < MCTS_CONFIG.maxIterations) {
+                    // ✅ FIXED: Schedule next step ONLY if we should continue
+                    if (button.hasClass("active") && 
+                        mctsIterationCount < MCTS_CONFIG.maxIterations && 
+                        currentMCTSDepth < MCTS_CONFIG.maxDepth) {
+                        
                         window.autoGenerateTimer = setTimeout(performMCTSStep, MCTS_CONFIG.explorationDelay);
                     } else {
-                    // Force stop if conditions not met
-                        performMCTSStep(); // This will trigger the stop logic
-}
+                        // Trigger stop logic by calling performMCTSStep again
+                        // This time it will hit the stop condition at the top
+                        setTimeout(performMCTSStep, 100); // Small delay to ensure UI updates
+                    }
                 },
                 error: function(xhr, status, error) {
                     console.error('MCTS step error:', error);
@@ -649,6 +700,7 @@ function toggleAutoGenerate() {
                     // Stop auto-generation on error
                     button.removeClass("active");
                     mctsIterationCount = 0;
+                    currentMCTSDepth = 0;
                     if (window.autoGenerateTimer) {
                         clearTimeout(window.autoGenerateTimer);
                         window.autoGenerateTimer = null;

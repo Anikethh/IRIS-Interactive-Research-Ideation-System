@@ -32,6 +32,11 @@ class MCTSState:
         self.average_score = 0.0  # Average score across all criteria
         self.retrieved_knowledge = retrieved_knowledge or []  # Knowledge retrieved for this state
         self.feedback = feedback or {}  # General feedback for this state
+        # Add trajectory-level memory attributes
+        self.last_query = None  # Track the last retrieval query
+        self.problematic_aspects = []  # Track aspects that have been problematic
+        self.action_count = {}  # Count of each action type taken
+        self.memory_size = 3  # Keep last 3 items in memory
 
     def __eq__(self, other):
         if isinstance(other, MCTSState):
@@ -40,6 +45,41 @@ class MCTSState:
 
     def __hash__(self):
         return hash(self.current_idea)
+    
+    def record_action(self, action: str, **kwargs):
+        """Record an action in the trajectory memory"""
+        self.last_action = action
+        
+        # Update action count
+        self.action_count[action] = self.action_count.get(action, 0) + 1
+        
+        # Handle specific action types
+        if action == "retrieve_and_refine" and "query" in kwargs:
+            self.last_query = kwargs["query"]
+        
+        if action == "review_and_refine" and "low_scoring_aspects" in kwargs:
+            # Keep track of problematic aspects (limit to memory_size)
+            new_aspects = kwargs["low_scoring_aspects"]
+            self.problematic_aspects.extend(new_aspects)
+            # Keep only last few aspects to avoid memory explosion
+            if len(self.problematic_aspects) > self.memory_size:
+                self.problematic_aspects = self.problematic_aspects[-self.memory_size:]
+    
+    def get_memory_context(self) -> Dict[str, Any]:
+        """Get current memory context for decision making"""
+        return {
+            "last_query": self.last_query,
+            "problematic_aspects": self.problematic_aspects[-self.memory_size:],
+            "action_count": self.action_count.copy(),
+            "recent_actions": self._get_recent_actions()
+        }
+    
+    def _get_recent_actions(self) -> List[str]:
+        """Get list of recent actions for diversity checking"""
+        # This would be populated by the parent tracking recent actions
+        # For now, return based on action_count
+        return [action for action, count in self.action_count.items() if count > 0]
+    
 
     def to_json(self) -> Dict[str, Any]:
         """Serialize state to JSON."""

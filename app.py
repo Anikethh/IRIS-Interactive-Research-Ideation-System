@@ -888,6 +888,7 @@ def step():
     action = data["action"]
     use_mcts = data.get('use_mcts', False)
     num_iterations = data.get('num_iterations', 1)
+    max_iterations = data.get('max_iterations', 5)
 
     try:
         # Enhanced MCTS implementation following Algorithm 1 from the PDF
@@ -899,19 +900,10 @@ def step():
             exploration_in_progress = True
             
             try:
-                # MCTS Algorithm 1 implementation
-                chat_messages.append({
-                    "role": "system", 
-                    "content": f"🔬 Starting MCTS exploration for {num_iterations} iteration(s)..."
-                })
                 
                 # Perform MCTS iterations
                 best_node = current_node
-                for iteration in range(num_iterations):
-                    chat_messages.append({
-                        "role": "system", 
-                        "content": f"🔄 MCTS Iteration {iteration + 1}/{num_iterations}"
-                    })
+                if use_mcts and num_iterations <= max_iterations:
                     
                     # Phase 1: SELECT - Traverse tree using UCT to find leaf node
                     selected_node = mcts_select(current_root)
@@ -1183,15 +1175,16 @@ def step():
             )
             
             # Create a new state with trajectory-level memory
-            # Start with depth 1 since this is directly connected to the root
-            parent_depth = current_node.parent.state.depth if current_node.parent else 0
-            refresh_state = MCTSState(
-                research_goal=research_goal,
-                current_idea=response["content"],
-                retrieved_knowledge=[],  # Start with empty retrieved knowledge for new approach
-                feedback={},  # Start with empty feedback for new approach
-                depth=current_node.state.depth  # Directly connected to root, so depth is 1
-            )
+            # # Start with depth 1 since this is directly connected to the root
+            # parent_depth = current_node.parent.state.depth if current_node.parent else 0
+            if response and "content" in response:
+                refresh_state = MCTSState(
+                    research_goal=research_goal,
+                    current_idea=response["content"],
+                    retrieved_knowledge=[],  # Start with empty retrieved knowledge for new approach
+                    feedback={},  # Start with empty feedback for new approach
+                    depth=current_node.state.depth +1  # Directly connected to root, so depth is 1
+                )
             
             # Get new review scores
             new_review = review_agent.unified_review(refresh_state.current_idea)
@@ -1387,14 +1380,15 @@ def mcts_expand(node):
                 new_state = execute_mcts_action(node.state, action)
                 
                 if new_state:
-                    # SPECIAL HANDLING FOR REFRESH_IDEA - create sibling instead of child
-                    if action == "refresh_idea":
-                        # Add as child of parent (sibling of current node)
-                        parent_node = node.parent if node.parent else node  # Fallback to current if no parent
-                        child = parent_node.add_child(new_state, action)
-                    else:
-                        # Regular child creation for other actions
-                        child = node.add_child(new_state, action)
+                    # # SPECIAL HANDLING FOR REFRESH_IDEA - create sibling instead of child
+                    # if action == "refresh_idea":
+                    #     # Add as child of parent (sibling of current node)
+                    #     parent_node = node.parent if node.parent else node  # Fallback to current if no parent
+                    #     child = parent_node.add_child(new_state, action)
+                    # else:
+                    #     # Regular child creation for other actions
+                    child = node.add_child(new_state, action)
+                    child.state.depth = node.state.depth + 1
                     
                     # Evaluate the new child/sibling node
                     try:
