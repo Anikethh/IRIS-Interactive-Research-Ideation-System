@@ -9,6 +9,8 @@ import os
 import retry
 import litellm
 from .prompts import REVIEW_SINGLE_ASPECT_PROMPT
+from .llm_client import completion
+from src.utils.env_loader import select_llm_model
 
 
 class StructuredReviewAgent:
@@ -21,7 +23,7 @@ class StructuredReviewAgent:
 
         # Get model configuration 
         # self.model = self.config["ideation_agent"].get("model", "gemini/gemini-2.0-flash")
-        self.model = self.config["review_agent"].get("model", "gemini/gemini-2.0-flash")
+        self.model = select_llm_model(self.config["review_agent"].get("model", "gemini/gemini-2.0-flash"))
 
         # New taxonomy of review aspects
         self.review_aspects = [
@@ -64,7 +66,7 @@ class StructuredReviewAgent:
     def chat(self, messages: List[Dict[str, str]]) -> Dict[str, Any]:
         """Send a chat request to the model."""
         try:
-            response = litellm.completion(messages=messages, model=self.model)
+            response = completion(messages=messages, model=self.model)
             import time as t
             t.sleep(2)
             return response

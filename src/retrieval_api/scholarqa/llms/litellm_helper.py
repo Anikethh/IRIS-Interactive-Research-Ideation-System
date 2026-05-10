@@ -7,6 +7,7 @@ import litellm
 from litellm.caching import Cache
 from litellm.utils import trim_messages
 from langsmith import traceable
+from src.agents.llm_client import _should_use_responses_api, completion as iris_completion
 
 # Azure OpenAI imports (only imported when DEPLOY=true)
 try:
@@ -88,6 +89,44 @@ def setup_llm_cache(cache_type: str = "s3", **cache_args):
     logger.info("Setting up LLM cache...")
     litellm.cache = Cache(type=cache_type, **cache_args)
     litellm.enable_cache()
+
+
+def _completion_result_from_response(response) -> CompletionResult:
+    usage = getattr(response, "usage", None)
+    content = response.choices[0].message.content if response.choices else ""
+    return CompletionResult(
+        content=(content or "").strip(),
+        model=getattr(response, "model", ""),
+        cost=0.0,
+        input_tokens=getattr(usage, "prompt_tokens", 0) if usage else 0,
+        output_tokens=getattr(usage, "completion_tokens", 0) if usage else 0,
+        total_tokens=getattr(usage, "total_tokens", 0) if usage else 0,
+    )
+
+
+def _iris_single_completion(user_prompt: str, system_prompt: str = None, model: str = "gpt-5.4",
+                            **llm_params) -> CompletionResult:
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": user_prompt})
+
+    supported_params = {}
+    for key in ["max_tokens", "response_format"]:
+        if key in llm_params:
+            supported_params[key] = llm_params[key]
+
+    return _completion_result_from_response(
+        iris_completion(messages=messages, model=model, **supported_params)
+    )
+
+
+def _iris_batch_completion(model: str, messages: List[str], system_prompt: str = None,
+                           **llm_params) -> List[CompletionResult]:
+    return [
+        _iris_single_completion(msg, system_prompt=system_prompt, model=model, **llm_params)
+        for msg in messages
+    ]
 
 def _azure_batch_completion(model: str, messages: List[str], system_prompt: str = None, **llm_params) -> List[CompletionResult]:
     """Azure OpenAI batch completion wrapper"""
@@ -204,7 +243,10 @@ def batch_llm_completion(model: str, messages: List[str], system_prompt: str = N
                          **llm_lite_params) -> List[CompletionResult]:
     """returns the result from the llm chat completion api with cost and tokens used"""
     
-    if DEPLOY_MODE and azure_client:
+    if _should_use_responses_api(model):
+        logger.debug(f"Using IRIS Responses API for batch completion with model: {model}")
+        return _iris_batch_completion(model, messages, system_prompt, **llm_lite_params)
+    elif DEPLOY_MODE and azure_client:
         logger.debug(f"Using Azure OpenAI for batch completion with model: {model}")
         return _azure_batch_completion(model, messages, system_prompt, **llm_lite_params)
     else:
@@ -237,10 +279,14 @@ def batch_llm_completion(model: str, messages: List[str], system_prompt: str = N
 def llm_completion(user_prompt: str, system_prompt: str = None, fallback=GPT_4o, **llm_lite_params) -> CompletionResult:
     """returns the result from the llm chat completion api with cost and tokens used"""
     
-    if DEPLOY_MODE and azure_client:
+    model = llm_lite_params.get('model', 'gpt-3.5-turbo')
+    llm_params = {k: v for k, v in llm_lite_params.items() if k != "model"}
+    if _should_use_responses_api(model):
+        logger.debug(f"Using IRIS Responses API for completion with model: {model}")
+        return _iris_single_completion(user_prompt, system_prompt, model, **llm_params)
+    elif DEPLOY_MODE and azure_client:
         logger.debug(f"Using Azure OpenAI for completion")
-        model = llm_lite_params.get('model', 'gpt-3.5-turbo')
-        return _azure_single_completion(user_prompt, system_prompt, model, **llm_lite_params)
+        return _azure_single_completion(user_prompt, system_prompt, model, **llm_params)
     else:
         logger.debug(f"Using LiteLLM for completion")
         messages = []

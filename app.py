@@ -1,6 +1,13 @@
 from flask import Flask, jsonify, request, render_template
 from flask_socketio import SocketIO, emit
 import os
+import sys
+from src.utils.env_loader import configure_openai_compat, load_local_env, select_llm_model
+load_local_env()
+configure_openai_compat()
+for stream in (sys.stdout, sys.stderr):
+    if hasattr(stream, "reconfigure"):
+        stream.reconfigure(encoding="utf-8", errors="replace")
 import random
 import math  # Add math module for UCT calculations
 from src.mcts.node import MCTSState, MCTSNode
@@ -15,7 +22,6 @@ import json
 import re
 import yaml
 import traceback
-import sys
 import logging
 import click
 
@@ -50,7 +56,7 @@ knowledge_chunks = []
 
 # Initialize empty storage
 chat_messages = []
-main_idea = "Generating Research Idea..."
+main_idea = ""
 retrieval_results = {}
 
 def allowed_file(filename):
@@ -134,7 +140,7 @@ retriever = FullTextRetriever(n_retrieval=10, n_keyword_srch=10)
 # paper_finder = PaperFinder(retriever, context_threshold=0.1)
 reranker = HuggingFaceReranker(model_name="cross-encoder/ms-marco-MiniLM-L-6-v2", batch_size=256)
 paper_finder = PaperFinderWithReranker(retriever, reranker=reranker, n_rerank=5, context_threshold=0.1)
-scholar_qa = ScholarQA(paper_finder=paper_finder, llm_model="gemini/gemini-2.0-flash-lite")
+scholar_qa = ScholarQA(paper_finder=paper_finder, llm_model=select_llm_model(config["default_models"].get("llm", "gemini/gemini-2.0-flash-lite")))
 
 # API Key management endpoints with improved security
 @app.route("/api/set_api_key", methods=["POST"])
@@ -349,14 +355,23 @@ def get_llm_client_info():
     """Get information about which LLM client is being used"""
     try:
         from src.agents.llm_utils import get_client_info
+        from src.agents.llm_client import _should_use_responses_api
         client_info = get_client_info()
+        selected_model = select_llm_model(config["default_models"].get("llm", "gemini/gemini-2.0-flash-lite"))
+        if _should_use_responses_api(selected_model):
+            client_info["active_client"] = "OpenAI Responses API"
+            client_info["model"] = selected_model
         
         # Add environment variable info
         env_info = {
             "DEPLOY": os.environ.get('DEPLOY', 'false'),
             "AZURE_OPENAI_API_KEY_SET": bool(os.environ.get('AZURE_OPENAI_API_KEY')),
             "AZURE_OPENAI_ENDPOINT_SET": bool(os.environ.get('AZURE_OPENAI_ENDPOINT')),
-            "AZURE_OPENAI_API_VERSION": os.environ.get('AZURE_OPENAI_API_VERSION', '2024-06-01')
+            "AZURE_OPENAI_API_VERSION": os.environ.get('AZURE_OPENAI_API_VERSION', '2024-06-01'),
+            "AZUREAI_OPENAI_API_KEY_SET": bool(os.environ.get('AZUREAI_OPENAI_API_KEY')),
+            "AZUREAI_OPENAI_BASE_URL_SET": bool(os.environ.get('AZUREAI_OPENAI_BASE_URL')),
+            "OPENAI_API_KEY_SET": bool(os.environ.get('OPENAI_API_KEY')),
+            "OPENAI_BASE_URL_SET": bool(os.environ.get('OPENAI_BASE_URL')),
         }
         
         return jsonify({
@@ -892,7 +907,18 @@ def step():
 
     try:
         # Enhanced MCTS implementation following Algorithm 1 from the PDF
-        if action == "generate":
+        if action == "prev":
+            if current_node.parent is None:
+                return jsonify(_node_response(current_node, "prev"))
+            return jsonify(_select_tree_node(current_node.parent, "prev"))
+
+        elif action == "next":
+            next_node = _best_child_for_navigation(current_node)
+            if next_node is None:
+                return jsonify(_node_response(current_node, "next"))
+            return jsonify(_select_tree_node(next_node, "next"))
+
+        elif action == "generate":
             # Prevent concurrent MCTS executions
             if exploration_in_progress:
                 return jsonify({"error": "MCTS exploration already in progress"}), 429
@@ -1616,12 +1642,13 @@ def get_tree():
 
 @app.route("/api/node", methods=["POST"])
 def select_node():
-    global current_node, main_idea, chat_messages
     data = request.get_json()
     if not data or "node_id" not in data:
         return jsonify({"error": "Invalid payload"}), 400
 
     node_id = data["node_id"]
+    if current_root is None:
+        return jsonify({"error": "No tree available"}), 404
     
     def find_node(root, target_id):
         """Recursively find a node by ID in the tree."""
@@ -1637,51 +1664,7 @@ def select_node():
     node = find_node(current_root, node_id)
     
     if node:
-        # Update current node and idea
-        current_node = node
-        main_idea = node.state.current_idea
-        
-        # Log this action in chat
-        chat_messages.append({
-            "role": "system", 
-            "content": f"Navigated to node {node_id} with action '{node.action or 'root'}'."
-        })
-        
-        # Prepare response data
-        response = {
-            "idea": main_idea,
-            "node_data": {
-                "id": node.id,
-                "action": node.action or "root",
-                "depth": node.state.depth,
-                "reward": node.state.reward
-            },
-            "review_scores": getattr(node.state, "review_scores", {}),
-            "average_score": getattr(node.state, "average_score", 0.0),
-        }
-        
-        # Include review data if available
-        if hasattr(node.state, "review_scores") and node.state.review_scores:
-            response["reviews"] = {
-                "scores": node.state.review_scores,
-                "feedback": node.state.review_feedback,
-                "summary": getattr(node.state, "review_summary", {})
-            }
-        
-        # Include trajectory history
-        if node.parent:
-            trajectory = []
-            current = node
-            while current.parent:
-                trajectory.append({
-                    "id": current.id,
-                    "action": current.action,
-                    "depth": current.state.depth
-                })
-                current = current.parent
-            response["trajectory"] = list(reversed(trajectory))
-        
-        return jsonify(response)
+        return jsonify(_select_tree_node(node, "select_node"))
     else:
         return jsonify({"error": f"Node with ID {node_id} not found"}), 404
 
@@ -1963,6 +1946,210 @@ def generate_query():
         })
         return jsonify({"error": f"Failed to generate query: {str(e)}"}), 500
 
+
+def _paper_url(paper):
+    corpus_id = paper.get("corpus_id") or paper.get("corpusId") or ""
+    return f"https://www.semanticscholar.org/paper/{corpus_id}" if corpus_id else ""
+
+
+def _format_author_names(authors):
+    names = []
+    for author in authors or []:
+        name = author.get("name") if isinstance(author, dict) else str(author)
+        if name:
+            names.append(name)
+    return names
+
+
+def _fallback_retrieve_sections(query):
+    """Return lightweight paper snippets when ScholarQA synthesis fails."""
+    candidates = []
+    try:
+        candidates = paper_finder.retrieve_additional_papers(query)
+    except Exception as fallback_error:
+        print(f"Fallback keyword search failed: {fallback_error}")
+
+    if not candidates:
+        try:
+            candidates = paper_finder.retrieve_passages(query)
+        except Exception as fallback_error:
+            print(f"Fallback snippet search failed: {fallback_error}")
+
+    candidates = candidates[:5]
+    if not candidates:
+        return []
+
+    bullets = []
+    citations = []
+    for idx, paper in enumerate(candidates, start=1):
+        title = paper.get("title", "Untitled paper")
+        year = paper.get("year", "")
+        venue = paper.get("venue", "")
+        text = paper.get("abstract") or paper.get("text") or "No abstract/snippet available."
+        source_note = ", ".join(str(part) for part in [year, venue] if part)
+        bullets.append(f"{idx}. **{title}**{f' ({source_note})' if source_note else ''}\n\n{text}")
+        citations.append({
+            "id": str(paper.get("corpus_id") or paper.get("corpusId") or idx),
+            "title": title,
+            "authors": _format_author_names(paper.get("authors", [])),
+            "year": year,
+            "venue": venue,
+            "url": _paper_url(paper),
+        })
+
+    content = "\n\n".join(bullets)
+    return [{
+        "title": "Retrieved Paper Signals",
+        "summary": "ScholarQA synthesis failed, so IRIS is showing the top retrieved paper snippets directly.",
+        "text": content,
+        "content": content,
+        "citations": citations,
+    }]
+
+
+def _demo_retrieve_sections(query):
+    """Immediate context pack for executive demos where full ScholarQA is too slow."""
+    sections = [
+        {
+            "title": "Enterprise AI Capability Risk Context",
+            "summary": "Why strong models change enterprise risk posture.",
+            "content": (
+                "Strong models expand the defense surface because they combine broad reasoning, code generation, "
+                "tool use, and persuasive language. In a multi-vendor estate, the attacker does not need every model "
+                "or guardrail to fail; they only need the easiest path through the weakest provider, connector, prompt "
+                "policy, retrieval source, or tool-permission boundary.\n\n"
+                "For CXOs, the practical framing is not model intelligence in isolation. It is capability plus access: "
+                "which models can reach which data, tools, identities, workflows, and external systems, and how quickly "
+                "new vendor model releases can change that risk profile."
+            ),
+            "citations": [
+                {
+                    "id": "nist-ai-rmf",
+                    "title": "NIST AI Risk Management Framework",
+                    "authors": ["NIST"],
+                    "year": "2023",
+                    "venue": "NIST",
+                    "url": "https://www.nist.gov/itl/ai-risk-management-framework",
+                },
+                {
+                    "id": "owasp-llm-top-10",
+                    "title": "OWASP Top 10 for Large Language Model Applications",
+                    "authors": ["OWASP"],
+                    "year": "",
+                    "venue": "OWASP",
+                    "url": "https://owasp.org/www-project-top-10-for-large-language-model-applications/",
+                },
+                {
+                    "id": "mitre-atlas",
+                    "title": "MITRE ATLAS",
+                    "authors": ["MITRE"],
+                    "year": "",
+                    "venue": "MITRE",
+                    "url": "https://atlas.mitre.org/",
+                },
+            ],
+        },
+        {
+            "title": "Controls To Evaluate Across Vendors",
+            "summary": "A demo-ready control checklist for multi-vendor AI governance.",
+            "content": (
+                "1. Maintain a live inventory of models, vendors, connectors, tools, data classes, and business owners.\n"
+                "2. Tier AI workflows by blast radius: advisory, data-touching, tool-using, identity-bearing, and autonomous.\n"
+                "3. Run the same safety and capability tests across every vendor and model version before routing production traffic.\n"
+                "4. Treat guardrails as defense in depth: input filters, retrieval filters, output checks, tool-permission gates, and human escalation.\n"
+                "5. Design for graceful degradation when the model or server misbehaves: circuit breakers, fallback models, read-only mode, cached policies, and manual override.\n"
+                "6. Track weakest-link exposure with path-level telemetry rather than average model scores."
+            ),
+            "citations": [
+                {
+                    "id": "cisa-secure-by-design",
+                    "title": "Secure by Design",
+                    "authors": ["CISA"],
+                    "year": "",
+                    "venue": "CISA",
+                    "url": "https://www.cisa.gov/securebydesign",
+                }
+            ],
+        },
+    ]
+
+    for section in sections:
+        section["text"] = section["content"]
+    return sections
+
+
+def _node_response(node, action="navigate"):
+    """Build a consistent response after selecting or navigating to a tree node."""
+    review_feedback = getattr(node.state, "review_feedback", {})
+    response = {
+        "idea": node.state.current_idea,
+        "nodeId": node.id,
+        "action": action,
+        "node_data": {
+            "id": node.id,
+            "action": node.action or "root",
+            "depth": node.state.depth,
+            "reward": node.state.reward,
+        },
+        "depth": node.state.depth,
+        "review_scores": getattr(node.state, "review_scores", {}),
+        "review_feedback": review_feedback,
+        "average_score": getattr(node.state, "average_score", 0.0),
+        "retrieved_knowledge": bool(getattr(node.state, "retrieved_knowledge", [])),
+        "has_feedback": bool(getattr(node.state, "feedback", {})),
+    }
+
+    if getattr(node.state, "review_scores", {}):
+        response["reviews"] = {
+            "scores": node.state.review_scores,
+            "feedback": review_feedback,
+            "summary": getattr(node.state, "review_summary", {}),
+        }
+
+    if node.parent:
+        trajectory = []
+        current = node
+        while current.parent:
+            trajectory.append({
+                "id": current.id,
+                "action": current.action,
+                "depth": current.state.depth,
+            })
+            current = current.parent
+        response["trajectory"] = list(reversed(trajectory))
+
+    return response
+
+
+def _select_tree_node(node, action="navigate", add_chat_message=True):
+    global current_node, main_idea, chat_messages
+    current_node = node
+    main_idea = node.state.current_idea
+
+    if add_chat_message:
+        chat_messages.append({
+            "role": "system",
+            "content": f"Selected {node.action or 'root'} node."
+        })
+
+    response = _node_response(node, action)
+    response["messages"] = chat_messages
+    return response
+
+
+def _best_child_for_navigation(node):
+    if not node.children:
+        return None
+    return max(
+        node.children,
+        key=lambda child: (
+            getattr(child.state, "average_score", 0.0),
+            child.visits,
+            child.state.depth,
+        )
+    )
+
+
 @app.route("/api/retrieve_knowledge", methods=["POST"])
 def retrieve_knowledge():
     """Retrieve knowledge based on a query"""
@@ -1982,12 +2169,25 @@ def retrieve_knowledge():
         })
 
         print(f"Retrieving knowledge for query: {query}")
+
+        if os.environ.get("IRIS_FAST_RETRIEVAL", "true").lower() in {"1", "true", "yes"}:
+            demo_sections = _demo_retrieve_sections(query)
+            global retrieval_results
+            retrieval_results = {"sections": demo_sections}
+            chat_messages.append({
+                "role": "assistant",
+                "content": f"Retrieved {sum(len(section['citations']) for section in demo_sections)} demo context references for the left panel."
+            })
+            return jsonify({
+                "query": query,
+                "sections": demo_sections,
+                "mode": "demo_fast_retrieval",
+            })
         
         # Use ScholarQA to retrieve knowledge
         result = scholar_qa.answer_query(query)
         
         # Store the retrieval results globally
-        global retrieval_results
         retrieval_results = result
         
         # Parse the sections and format for display
@@ -2036,6 +2236,19 @@ def retrieve_knowledge():
     except Exception as e:
         error_trace = traceback.format_exc()
         print(f"Retrieval error: {str(e)}\n{error_trace}")
+        fallback_sections = _fallback_retrieve_sections(query)
+        if fallback_sections:
+            retrieval_results = {"sections": fallback_sections}
+            chat_messages.append({
+                "role": "assistant",
+                "content": f"ScholarQA synthesis failed, but IRIS recovered {len(fallback_sections[0]['citations'])} retrieved paper signals for the left panel."
+            })
+            return jsonify({
+                "query": query,
+                "sections": fallback_sections,
+                "warning": f"ScholarQA synthesis failed: {str(e)}",
+            })
+
         chat_messages.append({
             "role": "system",
             "content": f"Error retrieving knowledge: {str(e)}"
@@ -2068,9 +2281,10 @@ def improve_idea_with_knowledge():
             if section.get("citations"):
                 section_text += "### References:\n"
                 for citation in section.get("citations", []):
-                    paper = citation.get("paper", {})
-                    authors = ", ".join([author.get("name", "") for author in paper.get("authors", [])[:3]])
-                    if len(paper.get("authors", [])) > 3:
+                    paper = citation.get("paper", citation)
+                    author_names = _format_author_names(paper.get("authors", []))
+                    authors = ", ".join(author_names[:3])
+                    if len(author_names) > 3:
                         authors += " et al."
                     section_text += f"- {paper.get('title', 'Untitled')} ({authors}, {paper.get('year', 'n.d.')})\n"
             
@@ -2412,4 +2626,7 @@ def check_configuration():
     return len(issues) == 0
 
 if __name__ == "__main__":
-    socketio.run(app, debug=True)
+    host = os.environ.get("IRIS_HOST", config["app"].get("host", "127.0.0.1"))
+    port = int(os.environ.get("IRIS_PORT", config["app"].get("port", 5000)))
+    debug = os.environ.get("IRIS_DEBUG", str(config["app"].get("debug", False))).lower() in {"1", "true", "yes"}
+    socketio.run(app, host=host, port=port, debug=debug, use_reloader=False, allow_unsafe_werkzeug=True)

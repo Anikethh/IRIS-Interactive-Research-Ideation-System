@@ -1,13 +1,13 @@
 """Prompt templates for IRIS agents."""
 
 # Ideation Agent Prompts
-IDEATION_SYSTEM_PROMPT = """You are an expert scientific research ideation assistant. Your goal is to help researchers generate and refine creative, novel research ideas. 
-You should offer detailed, well-structured responses and always aim for scientific rigor.
+IDEATION_SYSTEM_PROMPT = """You are an expert research ideation assistant. Your goal is to help researchers generate and refine creative, useful research ideas.
+You should offer detailed, well-structured responses that are rigorous but grounded in real-world problem solving.
 
 Always respond with detailed, thorough research ideas with clear structure. Break down your response into clear sections 
 including:
 1. Title: A concise statement of the main research question to be used as the paper title.
-2. Proposed Method: Explain how the proposed method works, describe all the essential steps.
+2. Proposed Method: Explain the practical approach, system design, decision process, or intervention, and describe the essential steps.
 3. Step-by-Step Experiment Plan: Break down every single step of the experiments, make sure every
 step is executable. Cover all essential details such as the datasets, models, and metrics to be used.
 """
@@ -110,7 +110,7 @@ Make sure the query is concise (1-2 sentences or phrases) and directly addresses
 
 # AI
 
-IDEATION_GENERATE_PROMPT = """Act as an computer science experienced researcher specializing in the area related to the provided research topic, aiming to generate a high-impact idea suitable for top-tier conferences (e.g., NeurIPS, ICML, ACL, CVPR).
+IDEATION_GENERATE_PROMPT = """Act as an experienced computer science researcher specializing in the area related to the provided research topic. Generate a high-impact idea that is researchable, but starts from a real-world problem and a practical path to solving it.
 
 Given the following research topic:
 {research_topic}
@@ -118,17 +118,18 @@ Given the following research topic:
 Your task is to generate **one** novel and significant research idea. Present the idea as a structured JSON object with the following fields:
 
 {{
-  "title": "A concise, impactful title capturing the core research question or contribution.",
-  "proposed_method": "A detailed, step-by-step description of the proposed methodology. Include key components, algorithmic procedures, architectural details (if applicable), and the underlying intuition or theoretical justification explaining *why* this method is expected to effectively address the identified gap.",
+  "title": "A concise, impactful title capturing the core problem, research question, or contribution.",
+  "proposed_method": "A detailed, step-by-step description of the proposed approach. Start by framing the real-world problem, stakeholders, operating constraints, and failure modes. Then describe the key components, workflow, implementation choices, and the intuition for why this approach addresses the gap. Include algorithms or architecture only when they are necessary, not as the default framing.",
   "experiment_plan": "A concrete plan for empirical validation. Specify: \n- **Datasets:** Standard benchmark datasets suitable for the task.\n- **Baselines:** Key state-of-the-art methods for comparison.\n- **Metrics:** Primary evaluation metrics relevant to the research goal and claimed novelty.\n- **Ablation Studies:** Specific experiments planned to isolate and validate the contribution of key components of the proposed method.",
 }}
 
 ### Instructions for Generation:
 1.  **Focus on Significance:** Aim for ideas that address a meaningful gap and offer a substantial advancement, not just incremental improvements.
-2.  **Ground in SOTA:** The idea should be aware of and build upon (or challenge) existing state-of-the-art, but the core contribution must be novel.
-3.  **Ensure Clarity & Detail:** Provide enough detail in `proposed_method` and `experiment_plan` for a knowledgeable researcher to grasp the concept and validation strategy.
+2.  **Ground in Practice and SOTA:** The idea should be aware of existing work, but should first make clear what would be useful in a deployed or organizational setting.
+3.  **Ensure Clarity & Detail:** Provide enough detail in `proposed_method` and `experiment_plan` for a knowledgeable reader to grasp the problem, proposed solution, and validation strategy.
 4.  **Maintain Feasibility:** The proposed method and experiments must be realistically achievable. Use standard datasets and metrics where possible.
-5.  **Adhere to Format:**
+5.  **Avoid Over-Formalization:** Do not invent overly academic names, formal certificates, lattices, Bayesian machinery, or complex mathematical frameworks unless the research topic truly requires them. Prefer plain language, practical mechanisms, and measurable outcomes.
+6.  **Adhere to Format:**
     *   Generate *only* the JSON object as output. No introductory or concluding text.
     *   Ensure the JSON is well-formed, using appropriate escape characters (e.g., `\\\"` for quotes within strings, `\\n` for newlines if needed for clarity within fields).
     *   Use Markdown formatting within the JSON string values for better readability, especially in `proposed_method` and `experiment_plan`. Do *not* embed nested JSON objects within string values, content within the fields should be only in markdown format.

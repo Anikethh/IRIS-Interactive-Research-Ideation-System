@@ -8,6 +8,8 @@ import numpy as np
 import retry
 import litellm
 from .prompts import REVIEW_SYSTEM_PROMPT, REVIEW_SINGLE_ASPECT_PROMPT, UNIFIED_REVIEW_PROMPT
+from .llm_client import completion
+from src.utils.env_loader import select_llm_model
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +20,7 @@ class ReviewAgent(BaseAgent):
         """Initialize with configuration."""
         super().__init__(config_path)
 # self.model = self.config["review_agent"].get("model", "gemini/gemini-2.0-flash-lite")
-        self.model = self.config["review_agent"].get("model", "gemini/gemini-2.0-flash")
+        self.model = select_llm_model(self.config["review_agent"].get("model", "gemini/gemini-2.0-flash"))
         # self.model = self.config["ideation_agent"].get("model", "gemini/gemini-2.0-flash")
         # Add default weights for scoring
         self.aspect_weights = {
@@ -93,7 +95,7 @@ class ReviewAgent(BaseAgent):
     def chat(self, messages: List[Dict[str, str]]) -> Dict[str, Any]:
         """Send a chat request to the model."""
         try:
-            response = litellm.completion(messages=messages, model=self.model)
+            response = completion(messages=messages, model=self.model)
             import time
             time.sleep(2)
             return response

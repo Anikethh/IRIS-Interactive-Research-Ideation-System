@@ -79,6 +79,98 @@ function formatMessage(content) {
     }
 }
 
+function isResearchBriefMessage(message) {
+    if (!message || message.role !== 'assistant' || !message.content) {
+        return false;
+    }
+
+    const content = message.content.trim();
+    return content.length > 1000 || content.startsWith('# ') || content.includes('## Proposed Method');
+}
+
+function restoreStartedState(messages) {
+    const firstUserMessage = messages.find(message => message.role === 'user');
+    if (!firstUserMessage) {
+        return;
+    }
+
+    $("#welcome-message").hide();
+    $("#proposal-content").show().text(firstUserMessage.content);
+    $("#edit-button").show();
+    $("#chat-input").attr("placeholder", "Provide feedback or suggestions to refine your research idea...");
+}
+
+function applyIdeaResponse(data) {
+    if (!data) {
+        return;
+    }
+
+    if (data.idea) {
+        const structuredIdea = parseAndFormatStructuredIdea(data.idea);
+        $("#main-idea").html(formatMessage(structuredIdea));
+        $("#main-idea").show();
+        $("#brief-placeholder").hide();
+        $(".research-brief-buttons").show();
+
+        main_idea = data.idea;
+        window.main_idea = data.idea;
+        highlightState.rawIdea = data.idea;
+        highlightState.lastContent = $("#main-idea").html();
+        highlightState.highlights = [];
+    }
+
+    if (data.average_score !== undefined) {
+        updateScoreDisplay(data.average_score);
+    }
+
+    if (data.review_feedback && typeof updateReviewFeedback === 'function') {
+        updateReviewFeedback(data.review_feedback);
+    }
+}
+
+function updateChat(messages) {
+    if (!Array.isArray(messages)) {
+        return;
+    }
+
+    const chatArea = $("#chat-box");
+    chatArea.empty();
+    restoreStartedState(messages);
+
+    let skippedBrief = false;
+    messages.forEach(function(message) {
+        if (isResearchBriefMessage(message)) {
+            skippedBrief = true;
+            return;
+        }
+
+        const messageDiv = $('<div></div>')
+            .attr('data-sender', message.role)
+            .html(formatMessage(message.content || ""));
+        chatArea.append(messageDiv);
+    });
+
+    if (skippedBrief) {
+        chatArea.append(
+            $('<div></div>')
+                .attr('data-sender', 'assistant')
+                .text('Research brief generated. See the Research Brief panel.')
+        );
+    }
+
+    chatArea.scrollTop(chatArea[0].scrollHeight);
+}
+
+function resizeChatInput() {
+    const input = document.getElementById('chat-input');
+    if (!input) {
+        return;
+    }
+
+    input.style.height = 'auto';
+    input.style.height = `${Math.min(input.scrollHeight, 144)}px`;
+}
+
 // Helper function to ensure consistent section header styling across the application
 function ensureSectionHeaderStyles() {
     const styleId = 'section-header-styles';
@@ -281,16 +373,7 @@ function addKnowledge() {
 
 function loadChat() {
     $.get('/api/chat', function (data) {
-        var chatArea = $("#chat-box");
-        chatArea.empty();
-        data.forEach(function (message) {
-            var messageDiv = $('<div></div>')
-                .attr('data-sender', message.role)
-                .html(formatMessage(message.content));
-            chatArea.append(messageDiv);
-        });
-        // Smooth scroll to bottom
-        chatArea.animate({ scrollTop: chatArea[0].scrollHeight }, 'slow');
+        updateChat(data);
     });
 }
 
@@ -298,6 +381,8 @@ function loadChat() {
 function loadIdea(isInitialLoad = false) {
     $.get('/api/idea', function (data) {
         if (data.idea) {
+            const ideaChanged = highlightState.rawIdea !== data.idea;
+
             // Store the raw idea
             highlightState.rawIdea = data.idea;
             
@@ -308,16 +393,18 @@ function loadIdea(isInitialLoad = false) {
             const structuredContent = parseAndFormatStructuredIdea(data.idea);
             
             // If this is an initial load or there are no highlights yet, replace content
-            if (isInitialLoad || highlightState.highlights.length === 0) {
+            if (isInitialLoad || ideaChanged || highlightState.highlights.length === 0) {
                 const formattedContent = formatMessage(structuredContent);
                 $("#main-idea").html(formattedContent);
                 highlightState.lastContent = $("#main-idea").html();
                 $("#main-idea").show(); // Show the main idea panel
                 $("#brief-placeholder").hide(); // Hide the placeholder
+                $(".research-brief-buttons").show();
+                $("#chat-input").attr("placeholder", "Provide feedback or suggestions to refine your research idea...");
             }
             
             // Show review feedback if it exists (without removing highlights)
-            if (data.review_feedback) {
+            if (data.review_feedback && typeof updateReviewFeedback === 'function') {
                 updateReviewFeedback(data.review_feedback);
             }
             
@@ -352,6 +439,7 @@ function sendMessage() {
     // Disable input while processing
     input.prop('disabled', true);
     input.val('');
+    resizeChatInput();
 
     // Add user message to chat ONLY if it's not the first message
     var chatArea = $("#chat-box");
@@ -408,18 +496,10 @@ function sendMessage() {
             }
 
             // Update main idea if provided
-            if (data.idea) {
-                // Parse and format any JSON structure in the idea
-                const structuredIdea = parseAndFormatStructuredIdea(data.idea);
-                $("#main-idea").html(formatMessage(structuredIdea));
-            }
+            applyIdeaResponse(data);
 
             // Show research brief buttons after first response
             $(".research-brief-buttons").fadeIn();
-
-            if (data.average_score !== undefined) {
-                updateScoreDisplay(data.average_score);
-            }
         },
         error: function (xhr, status, error) {
             // Remove loading indicator
@@ -437,13 +517,16 @@ function sendMessage() {
             // Re-enable input
             input.prop('disabled', false);
             input.focus();
+            resizeChatInput();
         }
     });
 }
 
-// Add Enter key handler for chat input
-$("#chat-input").keypress(function (e) {
-    if (e.which == 13 && !e.shiftKey) {  // Enter without Shift
+// Add autosize and Enter key handler for chat input
+$("#chat-input").on("input", resizeChatInput);
+
+$("#chat-input").on("keydown", function (e) {
+    if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         sendMessage();
     }
@@ -759,12 +842,7 @@ function stepAction(action) {
         contentType: 'application/json',
         data: JSON.stringify({ action: action }),
         success: function (data) {
-            // Update the main idea if provided
-            if (data.idea) {
-                // Parse and format any JSON structure in the idea
-                const structuredIdea = parseAndFormatStructuredIdea(data.idea);
-                $("#main-idea").html(formatMessage(structuredIdea));
-            }
+            applyIdeaResponse(data);
 
             // Update review scores if available
             updateReview(data);
@@ -773,9 +851,8 @@ function stepAction(action) {
             if (data.messages) {
                 updateChat(data.messages);
             }
-
-            if (data.average_score !== undefined) {
-                updateScoreDisplay(data.average_score);
+            if (treeMode && typeof loadTree === 'function') {
+                loadTree();
             }
         },
         error: function (xhr, status, error) {
@@ -1041,25 +1118,25 @@ function selectNode(d) {
         contentType: "application/json",
         data: JSON.stringify({ node_id: nodeId }),
         success: function(response) {
-            // Update UI to reflect selected node
-            // Parse and format any JSON structure in the idea
-            if (response.idea) {
-                const structuredIdea = parseAndFormatStructuredIdea(response.idea);
-                $("#main-idea").html(marked.parse(structuredIdea));
-            }
+            applyIdeaResponse(response);
             
             // Reload tree to update visualization
             loadTree();
             
-            // Add history entry
             const action = nodeData.name || "Unknown";
-            $("#history-log").append(
-                `<div class="history-item">Selected ${action} node (ID: ${nodeId})</div>`
-            );
-            
-            // Scroll history to bottom
             const historyLog = document.getElementById("history-log");
-            historyLog.scrollTop = historyLog.scrollHeight;
+            if (historyLog) {
+                $("#history-log").append(
+                    `<div class="history-item">Selected ${action} node (ID: ${nodeId})</div>`
+                );
+                historyLog.scrollTop = historyLog.scrollHeight;
+            } else {
+                $("#chat-box").append(
+                    $('<div></div>')
+                        .attr('data-sender', 'system')
+                        .text(`Selected ${action} node.`)
+                );
+            }
         },
         error: function(error) {
             console.error("Error selecting node:", error);
@@ -1116,18 +1193,7 @@ function refreshResearchIdea() {
             successMessage.slideDown();
             
             // Update research brief with new idea - this is the critical part
-            if (response.idea) {
-                // Force update the main_idea variable
-                main_idea = response.idea;
-                
-                // Force direct update to the research brief panel without parsing
-                $("#main-idea").html(marked.parse(response.idea));
-                
-                console.log("Research brief updated with new content:", $("#main-idea").html().substring(0, 100) + "...");
-                
-                // Don't add the refreshed idea to the chat window
-                // Only keep system messages in chat
-            }
+            applyIdeaResponse(response);
             
             // Update chat messages if any (only system messages)
             if (response.messages) {
@@ -1148,10 +1214,6 @@ function refreshResearchIdea() {
             // Scroll chat to bottom
             chatArea.animate({ scrollTop: chatArea[0].scrollHeight }, 'slow');
             
-            // Update review scores if available
-            if (response.review_scores && response.average_score) {
-                updateScoreDisplay(response.review_scores, response.average_score);
-            }
         },
         error: function(error) {
             console.error("Error refreshing idea:", error);
@@ -1815,9 +1877,7 @@ function clearHighlightsForAspect(aspect) {
 
 // Add this direct update function at the top of the file, to ensure it's available for all other functions
 function forceUpdateScoreDisplay(score) {
-    if (score === undefined || score === null) {
-        return; // Don't update if no score is provided
-    }
+    const numericScore = parseFloat(score);
     
     console.log("Forcing score update to:", score);
     
@@ -1832,7 +1892,11 @@ function forceUpdateScoreDisplay(score) {
     }
     
     // Update the score text with 2 decimal places
-    scoreValue.textContent = `${parseFloat(score).toFixed(2)}/10`;
+    if (!Number.isFinite(numericScore) || numericScore <= 0) {
+        scoreValue.textContent = "-/10";
+    } else {
+        scoreValue.textContent = `${numericScore.toFixed(2)}/10`;
+    }
     
     // Ensure the score display is visible
     scoreDisplay.style.display = 'block';
@@ -1842,97 +1906,9 @@ function forceUpdateScoreDisplay(score) {
     setTimeout(() => scoreValue.classList.remove('score-flash'), 500);
 }
 
-// Now update the original function to use our direct update function
-function updateScoreDisplay(score) {
-    forceUpdateScoreDisplay(score);
-}
-
 // Function to update score display
-function updateScoreDisplay(score) {
-    forceUpdateScoreDisplay(score);
-}
-
-// Add to the success handlers of API calls
-$.ajax({
-    url: '/api/chat',
-    type: 'POST',
-    contentType: 'application/json',
-    data: JSON.stringify({
-        content: messageContent
-    }),
-    success: function(data) {
-        // ...existing success handler code...
-        if (data.average_score !== undefined) {
-            updateScoreDisplay(data.average_score);
-        }
-    },
-    // ...rest of ajax code...
-});
-
-// Update score in other relevant API calls
-$.ajax({
-    url: '/api/step',
-    type: 'POST',
-    contentType: 'application/json',
-    data: JSON.stringify({
-        action: action
-    }),
-    success: function(data) {
-        // ...existing success handler code...
-        if (data.average_score !== undefined) {
-            updateScoreDisplay(data.average_score);
-        }
-    },
-    // ...rest of ajax code...
-});
-
-// $.ajax({
-//     url: '/api/improve_idea',
-//     type: 'POST',
-//     contentType: 'application/json',
-//     data: JSON.stringify({
-//         idea: ideaText,
-//         accepted_reviews: state.acceptedReviews
-//     }),
-//     success: function(data) {
-//         // ...existing success handler code...
-//         if (data.average_score !== undefined) {
-//             updateScoreDisplay(data.average_score);
-//         }
-//     },
-//     // ...rest of ajax code...
-// });
-
-$.ajax({
-    url: '/api/improve_idea_with_knowledge',
-    type: 'POST',
-    contentType: 'application/json',
-    data: JSON.stringify({
-        idea: idea,
-        // ...other data...
-    }),
-    success: function(data) {
-        // ...existing success handler code...
-        if (data.average_score !== undefined) {
-            updateScoreDisplay(data.average_score);
-        }
-    },
-    // ...rest of ajax code...
-});
-
-// Also update score when loading idea
-function loadIdea(isInitialLoad = false) {
-    $.ajax({
-        url: '/api/idea',
-        type: 'GET',
-        success: function(data) {
-            // ...existing success handler code...
-            if (data.average_score !== undefined) {
-                updateScoreDisplay(data.average_score);
-            }
-        },
-        // ...rest of ajax code...
-    });
+function updateScoreDisplay(score, maybeScore) {
+    forceUpdateScoreDisplay(maybeScore !== undefined ? maybeScore : score);
 }
 
 // Add to existing event listeners

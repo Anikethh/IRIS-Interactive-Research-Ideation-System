@@ -1,0 +1,15 @@
+.env
+.env.*
+!.env.example
+
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+instance/
+uploads/
+logs/
+results/
+secure_keys/
+*.log

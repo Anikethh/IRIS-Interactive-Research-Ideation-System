@@ -392,6 +392,7 @@ html {
 /* Chat input area */
 .chat-input {
     display: flex;
+    align-items: flex-end;
     gap: 0.5rem;
     padding: 1rem;
     background-color: #ffffff;
@@ -401,18 +402,22 @@ html {
     bottom: 0;
 }
 
-.chat-input input {
+.chat-input textarea {
     flex: 1;
-    height: 2.25rem;
-    padding: 0 1rem;
+    min-height: 2.25rem;
+    max-height: 9rem;
+    padding: 0.55rem 1rem;
     background-color: #f8fafc;
     border: 1px solid rgba(226, 232, 240, 0.8);
     border-radius: 12px;
     font-size: 0.95rem;
+    line-height: 1.35;
+    resize: none;
+    overflow-y: auto;
     transition: border-color 0.2s ease;
 }
 
-.chat-input input:focus {
+.chat-input textarea:focus {
     outline: none;
     border-color: #2563eb;
 }

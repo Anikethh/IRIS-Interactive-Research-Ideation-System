@@ -9,6 +9,8 @@ from typing import Dict, Any, Optional, List, Tuple
 import os
 # from google import genai
 from .base import BaseAgent
+from .llm_client import completion
+from src.utils.env_loader import select_llm_model
 from .prompts import (
     IDEATION_SYSTEM_PROMPT,
     IDEATION_GENERATE_PROMPT,
@@ -19,6 +21,10 @@ from .prompts import (
     IDEATION_DIRECT_FEEDBACK_PROMPT,
 )
 import litellm
+
+
+def _safe_debug_text(value: Any) -> str:
+    return str(value).encode("ascii", errors="backslashreplace").decode("ascii")
 
 
 class IdeationAgent(BaseAgent):
@@ -32,7 +38,7 @@ class IdeationAgent(BaseAgent):
 
         # Get model configuration
         # self.model = self.config["ideation_agent"].get("model", "gemini/gemini-2.0-flash-lite")
-        self.model = self.config["ideation_agent"].get("model", "gemini/gemini-2.0-flash")
+        self.model = select_llm_model(self.config["ideation_agent"].get("model", "gemini/gemini-2.0-flash"))
         # self.model = "gemini/gemini-2.0-flash"
         print(f"Using model: {self.model}")
 
@@ -62,7 +68,7 @@ class IdeationAgent(BaseAgent):
     def chat(self, model: str, messages: List[Dict[str, str]]) -> Dict[str, Any]:
         """Send a chat request to the model."""
         try:
-            response = litellm.completion(messages=messages, model=model)
+            response = completion(messages=messages, model=model)
             import time as t
             t.sleep(2)
             return response
@@ -104,7 +110,7 @@ class IdeationAgent(BaseAgent):
 
             # For debugging: print the raw LLM output to the terminal
             print(f"\n===== RAW LLM OUTPUT FOR {action} =====")
-            print(content)
+            print(_safe_debug_text(content))
             print("=====================================\n")
 
             # Record the brief if it's a generation action
@@ -577,7 +583,7 @@ Return the complete improved idea in the same format as the original."""
             new_content = response.choices[0].message.content
             
             print(f"\n===== RAW LLM OUTPUT FOR IMPROVEMENT =====")
-            print(new_content)
+            print(_safe_debug_text(new_content))
             print("==========================================\n")
                 
             # Clean up the response to remove any markdown code blocks that might have been added
@@ -641,7 +647,7 @@ Return the complete improved idea in the same format as the original."""
             new_content = response.choices[0].message.content
             
             print(f"\n===== RAW LLM OUTPUT FOR REFRESH IDEA =====")
-            print(new_content)
+            print(_safe_debug_text(new_content))
             print("==========================================\n")
             
             # Clean up the response to remove any markdown code blocks
@@ -945,7 +951,7 @@ Return the complete improved idea in the same format as the original."""
             new_content = response.choices[0].message.content
             
             print(f"\n===== RAW LLM OUTPUT FOR USER FEEDBACK IMPROVEMENT =====")
-            print(new_content)
+            print(_safe_debug_text(new_content))
             print("==========================================\n")
             
             # Try to extract structured data from the response
